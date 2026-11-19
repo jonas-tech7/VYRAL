@@ -12,6 +12,7 @@ import { db, schema } from "@/lib/db";
 import { env } from "@/lib/env";
 import { randomToken } from "@/lib/security/crypto";
 import { verifyWalletSignature } from "@/lib/solana/keys";
+import { TERMS_VERSION } from "@/lib/legal";
 
 export type NoncePurpose = "sign_in" | "claim";
 
@@ -23,7 +24,7 @@ export function buildSignInMessage(p: { wallet: string; nonce: string; issuedAt:
     `${url.host} wants you to sign in with your Solana account:`,
     p.wallet,
     "",
-    "Sign in to VYRAL. This signature proves you own this wallet. It does not create a transaction and costs nothing.",
+    `Sign in to VYRAL. This signature proves you own this wallet. It does not create a transaction and costs nothing. By signing in you accept the Terms of Use (${TERMS_VERSION}): ${new URL("/legal/terms", url).toString()}`,
     "",
     `URI: ${url.origin}`,
     "Version: 1",

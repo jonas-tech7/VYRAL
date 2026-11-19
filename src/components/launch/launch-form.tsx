@@ -5,6 +5,7 @@ import { Transaction, VersionedTransaction } from "@solana/web3.js";
 import { ImageUp } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { CurveChart } from "@/components/charts/curve-chart";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/form";
@@ -15,6 +16,7 @@ import { useAuth } from "@/components/wallet/auth-provider";
 import { api, ApiClientError } from "@/lib/client/api";
 import type { RewardCurveConfig } from "@/lib/config/schemas";
 import { bpsToPct, cn, fullNumber, usd } from "@/lib/format";
+import { TERMS_VERSION } from "@/lib/legal";
 
 export type LaunchConfig = {
   allowedIntervalsHours: number[];
@@ -35,7 +37,7 @@ type Prepared = {
   simulated: boolean;
 };
 
-type Errors = Partial<Record<"name" | "symbol" | "description" | "image" | "website" | "x" | "telegram" | "discord" | "ack", string>>;
+type Errors = Partial<Record<"name" | "symbol" | "description" | "image" | "website" | "x" | "telegram" | "discord" | "ack" | "terms", string>>;
 
 const STEP_LABEL = {
   idle: "",
@@ -78,6 +80,7 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
   const [interval, setInterval] = useState(config.defaultIntervalHours);
   const [initialBuy, setInitialBuy] = useState("");
   const [ack, setAck] = useState(false);
+  const [terms, setTerms] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const [step, setStep] = useState<Step>("idle");
   const [dragging, setDragging] = useState(false);
@@ -124,6 +127,7 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
     if (!validUrl(links.telegram, ["t.me", "telegram.me"])) e.telegram = "Use a t.me link.";
     if (!validUrl(links.discord, ["discord.gg", "discord.com"])) e.discord = "Use a discord.gg link.";
     if (!ack) e.ack = "Confirm that you reviewed the fee-sharing configuration.";
+    if (!terms) e.terms = "Accept the Terms of Use and the risk notice to launch.";
     return e;
   }
 
@@ -150,6 +154,7 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
           links: Object.fromEntries(Object.entries(links).filter(([, v]) => v.trim())),
           payoutIntervalHours: interval,
           initialBuySol: config.simulated ? 0 : Number(initialBuy || 0),
+          termsVersion: TERMS_VERSION,
         },
       });
 
@@ -424,6 +429,21 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
             {errors.ack ? (
               <p className="mt-2 text-[12.5px] text-negative" role="alert">
                 {errors.ack}
+              </p>
+            ) : null}
+            <label className="mt-3 flex cursor-pointer items-start gap-2.5 text-[12.5px] leading-relaxed text-ink-2">
+              <input type="checkbox" checked={terms} onChange={(e) => setTerms(e.target.checked)} className="mt-0.5 accent-[#2cf59e]" />
+              <span>
+                I accept the{" "}
+                <Link href="/legal/terms" target="_blank" className="text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
+                  Terms of Use
+                </Link>{" "}
+                and understand that tokens are highly speculative and can lose all of their value. VYRAL does not promise any price, attention or return.
+              </span>
+            </label>
+            {errors.terms ? (
+              <p className="mt-2 text-[12.5px] text-negative" role="alert">
+                {errors.terms}
               </p>
             ) : null}
             <Button variant="primary" size="lg" className="mt-4 w-full" loading={busy} onClick={() => void launch()}>

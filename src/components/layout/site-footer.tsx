@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
 import { env } from "@/lib/env";
+import { LEGAL_LINKS } from "@/lib/legal";
 
 const COLUMNS = [
   {
@@ -62,7 +63,14 @@ export function SiteFooter() {
       <div className="border-t border-edge">
         <div className="mx-auto flex max-w-[1200px] flex-col gap-2 px-4 py-5 text-[12px] text-ink-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <span>VYRAL · Create. Compete. Get Paid.</span>
-          <span>Solana {env.SOLANA_CLUSTER === "mainnet-beta" ? "Mainnet" : "Devnet"}</span>
+          <nav aria-label="Legal" className="flex flex-wrap gap-x-4 gap-y-1">
+            {LEGAL_LINKS.map((l) => (
+              <Link key={l.href} href={l.href} className="transition-colors hover:text-ink-2">
+                {l.label}
+              </Link>
+            ))}
+            <span>Solana {env.SOLANA_CLUSTER === "mainnet-beta" ? "Mainnet" : "Devnet"}</span>
+          </nav>
         </div>
       </div>
     </footer>

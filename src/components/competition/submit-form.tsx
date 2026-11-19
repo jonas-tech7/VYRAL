@@ -255,7 +255,11 @@ export function SubmitVideoForm({ mint, symbol, open }: { mint: string; symbol: 
           Submit to ${symbol}
         </Button>
         <span className="text-[12.5px] text-ink-3">
-          By submitting you agree to the <Link href="/docs/eligibility" className="underline decoration-edge-strong underline-offset-2 hover:text-ink">competition rules</Link>.
+          By submitting you agree to the{" "}
+          <Link href="/legal/terms" className="underline decoration-edge-strong underline-offset-2 hover:text-ink">
+            Terms of Use
+          </Link>{" "}
+          and the <Link href="/docs/eligibility" className="underline decoration-edge-strong underline-offset-2 hover:text-ink">competition rules</Link>.
         </span>
       </div>
       {!open ? <Notice tone="warning">This competition is not accepting entries right now.</Notice> : null}

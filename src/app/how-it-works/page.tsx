@@ -318,6 +318,10 @@ async function Content() {
           </li>
           <li>Coins are highly volatile and can lose all of their value. Attention does not guarantee a price.</li>
           <li>VYRAL rewards creators for attention; it does not promise returns to anyone. Nothing on this site is financial advice.</li>
+          <li>
+            Trades happen on independent third-party services, not on VYRAL. The <A href="/legal/terms">Terms of Use</A> and the{" "}
+            <A href="/legal/privacy">Privacy Policy</A> apply.
+          </li>
         </ul>
         <div className="mt-8 flex flex-wrap gap-3">
           <ButtonLink href="/launch" variant="primary" size="lg">

@@ -11,6 +11,7 @@ import { getAllConfig } from "@/lib/config/store";
 import { db, schema } from "@/lib/db";
 import { env } from "@/lib/env";
 import { buildTokenMetadata, coinPageUrl, launchLinkUrl } from "@/lib/launch/metadata";
+import { TERMS_VERSION } from "@/lib/legal";
 import { LAUNCH_DECIMALS, LAUNCH_SUPPLY, launchProvider } from "@/lib/providers/launch";
 import { storageProvider } from "@/lib/providers/storage";
 import { simMarketCap, simPrice } from "@/lib/sim/market-sim";
@@ -55,6 +56,8 @@ export const launchInputSchema = z.object({
     .prefault({}),
   payoutIntervalHours: z.number().int(),
   initialBuySol: z.number().min(0).max(50).default(0),
+  /** Version of the Terms of Use the deployer accepted; stored with the launch request. */
+  termsVersion: z.literal(TERMS_VERSION, { error: "Accept the current Terms of Use to launch." }),
 });
 export type LaunchInput = z.infer<typeof launchInputSchema>;
 

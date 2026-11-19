@@ -206,7 +206,7 @@ try {
   await page.getByLabel("Description").fill("Launched by the end-to-end test suite.");
   await page.locator('input[type="file"]').setInputFiles({ name: "token.png", mimeType: "image/png", buffer: png });
   await page.getByLabel("Every 3 hours").check();
-  await page.getByRole("checkbox").check();
+  for (const box of await page.getByRole("checkbox").all()) await box.check();
   await shot("e2e-launch-form", true);
   await page.getByRole("button", { name: "Launch token" }).click();
   await page.waitForURL(/\/competitions\/.+\?launched=1/, { timeout: 30_000 });

@@ -3,6 +3,7 @@
 import { WalletReadyState, type WalletName } from "@solana/wallet-adapter-base";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { ArrowUpRight } from "lucide-react";
+import Link from "next/link";
 import { Dialog } from "@/components/ui/dialog";
 import { useAuth } from "./auth-provider";
 
@@ -65,7 +66,16 @@ export function WalletModal() {
         ))}
       </ul>
       <p className="mt-4 text-[12px] leading-relaxed text-ink-3">
-        Any wallet supporting the Solana Wallet Standard is detected automatically. VYRAL never asks for your seed phrase or private key.
+        Any wallet supporting the Solana Wallet Standard is detected automatically. VYRAL never asks for your seed phrase or private key. By connecting,
+        you accept the{" "}
+        <Link href="/legal/terms" onClick={closeWalletModal} className="text-ink-2 underline decoration-edge-strong underline-offset-2 hover:text-ink">
+          Terms of Use
+        </Link>{" "}
+        and the{" "}
+        <Link href="/legal/privacy" onClick={closeWalletModal} className="text-ink-2 underline decoration-edge-strong underline-offset-2 hover:text-ink">
+          Privacy Policy
+        </Link>
+        .
       </p>
     </Dialog>
   );

@@ -76,6 +76,21 @@ const schema = z.object({
   PINATA_GATEWAY: optionalString,
   UPLOAD_DIR: z.string().default(".data/uploads"),
 
+  /** Operator details shown in the Imprint, Terms and Privacy Policy (non-secret). Address lines separated by "|". */
+  LEGAL_OPERATOR_NAME: optionalString,
+  LEGAL_OPERATOR_ADDRESS: optionalString,
+  LEGAL_CONTACT_EMAIL: optionalString,
+  LEGAL_CONTACT_PHONE: optionalString,
+  LEGAL_REPRESENTATIVE: optionalString,
+  LEGAL_REGISTER: optionalString,
+  LEGAL_VAT_ID: optionalString,
+  LEGAL_GOVERNING_LAW: optionalString,
+  /** Set to "true" once a lawyer has reviewed the legal texts; hides the draft notice. */
+  LEGAL_TEXTS_REVIEWED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+
   /** Trust X-Forwarded-For from a reverse proxy (only enable behind one). */
   TRUST_PROXY: z
     .enum(["true", "false"])

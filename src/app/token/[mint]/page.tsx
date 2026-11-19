@@ -11,6 +11,7 @@ import { ButtonLink, buttonClass } from "@/components/ui/button";
 import { Address, Countdown } from "@/components/ui/client";
 import { Container, KV, Notice, Panel, Skeleton } from "@/components/ui/misc";
 import { Delta } from "@/components/ui/stat";
+import { TradeButtons } from "@/components/token/trade-buttons";
 import { TokenAvatar } from "@/components/ui/token-avatar";
 import { bpsToPct, compactNumber, dateTimeUtc, fullNumber, price, score, shortAddress, sol, timeAgo, usd } from "@/lib/format";
 import { getCompetitionDetail } from "@/lib/queries/public";
@@ -89,14 +90,7 @@ async function TokenDetail({ params }: Pick<PageProps<"/token/[mint]">, "params"
               </span>
             </>
           ) : (
-            <>
-              <a href={buyUrl} target="_blank" rel="noopener noreferrer" className={buttonClass("primary", "md")}>
-                Buy <ArrowUpRight className="size-3.5" />
-              </a>
-              <a href={sellUrl} target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "md")}>
-                Sell <ArrowUpRight className="size-3.5" />
-              </a>
-            </>
+            <TradeButtons buyUrl={buyUrl} sellUrl={sellUrl} symbol={d.symbol} />
           )}
           <ButtonLink href={`/competitions/${d.mint}`} variant="secondary">
             Competition
