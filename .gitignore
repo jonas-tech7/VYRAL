@@ -45,3 +45,6 @@ next-env.d.ts
 !.env.example
 /test-results/
 /e2e/screenshots/
+
+# launch trailer renders (frames, stills, audio, MP4s)
+/video/out/
