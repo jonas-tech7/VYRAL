@@ -2,10 +2,11 @@ import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { FormationVisual } from "@/components/brand/formation";
 import { CompetitionsTable } from "@/components/competition/competitions-table";
 import { StatsSkeleton, TableSkeleton } from "@/components/competition/skeletons";
-import { CompetitionStatus } from "@/components/competition/status";
 import { DemoTag } from "@/components/ui/badge";
+import { ViralScoreSection } from "@/components/home/viral-score-section";
 import { ButtonLink } from "@/components/ui/button";
 import { Countdown } from "@/components/ui/client";
 import { Container, SectionHeader, Skeleton, TextLink } from "@/components/ui/misc";
@@ -18,7 +19,7 @@ import { getCompetitionDetail, getPlatformStats, listCompetitions } from "@/lib/
 export default function HomePage() {
   return (
     <Container>
-      <section className="grid gap-12 pb-16 pt-16 sm:pt-24 lg:grid-cols-[1fr_400px] lg:items-center lg:gap-16 lg:pb-24">
+      <section className="grid gap-6 pb-10 pt-8 sm:pt-12 lg:grid-cols-[1fr_460px] lg:items-center lg:gap-12 lg:pb-12 lg:pt-14">
         <div className="animate-fade-in">
           <p className="eyebrow inline-flex items-center gap-2">
             <span className="size-1.5 rounded-full bg-accent" aria-hidden />
@@ -39,12 +40,14 @@ export default function HomePage() {
             </ButtonLink>
           </div>
         </div>
-        <Suspense fallback={<Skeleton className="h-[360px] w-full rounded-lg" />}>
-          <LiveCompetition />
-        </Suspense>
+        <FormationVisual className="order-first mx-auto max-w-[240px] sm:max-w-[300px] lg:order-none lg:max-w-[460px]" />
       </section>
 
-      <section aria-labelledby="stats-heading">
+      <Suspense fallback={<Skeleton className="h-[74px] w-full rounded-lg" />}>
+        <LiveStrip />
+      </Suspense>
+
+      <section className="mt-6" aria-labelledby="stats-heading">
         <h2 id="stats-heading" className="sr-only">
           Platform statistics
         </h2>
@@ -95,6 +98,12 @@ export default function HomePage() {
           ))}
         </ol>
       </section>
+
+      <section className="mt-28 sm:mt-32" aria-labelledby="score-heading">
+        <Suspense fallback={<Skeleton className="mx-auto h-[640px] w-full max-w-[880px] rounded-lg" />}>
+          <ViralScoreSection />
+        </Suspense>
+      </section>
     </Container>
   );
 }
@@ -140,54 +149,64 @@ async function Trending() {
 }
 
 /** The current #1 trending competition, showing the mechanism at a glance. */
-async function LiveCompetition() {
+async function LiveStrip() {
   await connection();
   const { items } = await listCompetitions({ sort: "trending", limit: 1 });
   const top = items[0];
   if (!top) return null;
   const detail = await getCompetitionDetail(top.mint);
   if (!detail) return null;
-  const leaders = detail.leaderboard.slice(0, 3);
+  const leader = detail.leaderboard[0];
+  const href = `/competitions/${top.mint}`;
   return (
-    <aside aria-label="Live competition" className="animate-fade-in rounded-lg border border-edge bg-raised">
-      <div className="flex items-center justify-between gap-3 border-b border-edge px-5 py-3.5">
-        <Link href={`/competitions/${top.mint}`} className="flex min-w-0 items-center gap-2.5">
-          <TokenAvatar symbol={top.symbol} imageUrl={top.imageUrl} size={22} />
-          <span className="truncate text-[13.5px] font-medium text-ink">{top.name}</span>
-          <span className="text-[12px] text-ink-3">${top.symbol}</span>
-        </Link>
-        <CompetitionStatus status={top.status} />
+    <aside
+      aria-label="Live competition"
+      className="animate-fade-in grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-edge bg-edge lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.35fr)_auto]"
+    >
+      <Link href={href} className="col-span-2 flex min-w-0 items-center gap-3 bg-raised px-5 py-4 transition-colors hover:bg-overlay lg:col-span-1">
+        <TokenAvatar symbol={top.symbol} imageUrl={top.imageUrl} size={28} />
+        <span className="min-w-0">
+          <span className="flex items-center gap-2 text-[11.5px] text-ink-3">
+            <span className="size-1.5 animate-pulse-soft rounded-full bg-accent" aria-hidden />
+            Live now
+          </span>
+          <span className="mt-0.5 flex min-w-0 items-baseline gap-1.5">
+            <span className="truncate text-[14px] font-medium text-ink">{top.name}</span>
+            <span className="text-[12px] text-ink-3">${top.symbol}</span>
+          </span>
+        </span>
+      </Link>
+      <div className="bg-raised px-5 py-4">
+        <p className="text-[11.5px] text-ink-3">Next payout (est.)</p>
+        <p className="num mt-0.5 text-[16px] font-semibold tracking-[-0.01em] text-ink">{sol(top.estimatedRewardLamports)}</p>
+        <p className="text-[11.5px] text-ink-4">
+          {bpsToPct(top.currentRewardBps)} of fees at {usd(top.marketCapUsd, { compact: true })}
+        </p>
       </div>
-      <div className="grid grid-cols-2 gap-px bg-edge">
-        <div className="bg-raised px-5 py-4">
-          <p className="text-[12px] text-ink-3">Next payout (est.)</p>
-          <p className="mt-1 text-[22px] font-semibold tracking-[-0.02em] text-ink">{sol(top.estimatedRewardLamports)}</p>
-          <p className="mt-0.5 text-[12px] text-ink-3">{bpsToPct(top.currentRewardBps)} of fees at {usd(top.marketCapUsd, { compact: true })}</p>
-        </div>
-        <div className="bg-raised px-5 py-4">
-          <p className="text-[12px] text-ink-3">Checkpoint in</p>
-          <p className="mt-1 text-[22px] font-semibold tracking-[-0.02em] text-ink">
-            <Countdown to={top.nextCheckpointAt.toISOString()} />
+      <div className="bg-raised px-5 py-4">
+        <p className="text-[11.5px] text-ink-3">Checkpoint in</p>
+        <p className="num mt-0.5 text-[16px] font-semibold tracking-[-0.01em] text-ink">
+          <Countdown to={top.nextCheckpointAt.toISOString()} />
+        </p>
+        <p className="text-[11.5px] text-ink-4">Every {top.payoutIntervalHours} hours</p>
+      </div>
+      <div className="col-span-2 min-w-0 bg-raised px-5 py-4 lg:col-span-1">
+        <p className="text-[11.5px] text-ink-3">Leading</p>
+        {leader ? (
+          <p className="mt-1 flex min-w-0 items-center gap-2.5">
+            <PlatformTag platform={leader.platform} />
+            <span className="min-w-0 flex-1 truncate text-[13px] text-ink-2">
+              {leader.authorHandle ? `@${leader.authorHandle}` : shortAddress(leader.creatorWallet)}
+            </span>
+            <span className="num font-mono text-[13px] text-ink">{score(leader.viralScore)}</span>
           </p>
-          <p className="mt-0.5 text-[12px] text-ink-3">Every {top.payoutIntervalHours} hours</p>
-        </div>
-      </div>
-      <div className="border-t border-edge px-5 pb-2 pt-3.5">
-        <p className="text-[12px] text-ink-3">Leaderboard</p>
-        <ol className="mt-2">
-          {leaders.map((l) => (
-            <li key={l.id} className="flex items-center gap-3 border-b border-edge py-2.5 last:border-b-0">
-              <span className="w-4 font-mono text-[12px] text-ink-4">{l.rank}</span>
-              <PlatformTag platform={l.platform} />
-              <span className="min-w-0 flex-1 truncate text-[13px] text-ink-2">{l.authorHandle ? `@${l.authorHandle}` : shortAddress(l.creatorWallet)}</span>
-              <span className="num text-[13px] text-ink">{score(l.viralScore)}</span>
-            </li>
-          ))}
-        </ol>
+        ) : (
+          <p className="mt-1 text-[13px] text-ink-3">No entries yet</p>
+        )}
       </div>
       <Link
-        href={`/competitions/${top.mint}`}
-        className="flex items-center justify-between border-t border-edge px-5 py-3 text-[13px] text-ink-2 transition-colors hover:bg-overlay hover:text-ink"
+        href={href}
+        className="col-span-2 flex items-center justify-between gap-2 bg-raised px-5 py-4 text-[13px] text-ink-2 transition-colors hover:bg-overlay hover:text-ink lg:col-span-1"
       >
         View competition
         <ArrowRight className="size-3.5" />
