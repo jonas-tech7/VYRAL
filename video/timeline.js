@@ -9,8 +9,9 @@
  * in them is illustrative and labelled as such.
  */
 const CUES = await (await fetch("cues.json")).json();
+// Every layout measurement below needs the real fonts.
+await Promise.all(["600 100px Geist", "700 100px Geist", "500 40px \"Geist Mono\""].map((f) => document.fonts.load(f)));
 const ACCENT = "#2cf59e";
-const BG = "#050506";
 const stage = document.getElementById("stage");
 
 // ================================================================ utilities
@@ -96,23 +97,24 @@ function compact(n) {
 }
 /** Accent-coloured final punctuation, plus a manual kern for "TT" (Geist's T crossbars touch at tight tracking). */
 const dotify = (w) => w.replace(/TT/g, 'T<span class="kern">T</span>').replace(/([.?])$/, '<span class="dot">$1</span>');
-const mbx = document.getElementById("mbx-blur");
 const mby = document.getElementById("mby-blur");
 
-/** Uppercase headline whose words rise out of individual masks. */
-function headline(lines, { size, weight = 700, tracking = -0.03, lh = 0.98, align = "left" } = {}) {
+/** Uppercase headline whose words rise out of individual masks; the last word is set in the accent colour. */
+function headline(lines, { size, weight = 700, tracking = -0.03, lh = 0.98, align = "left", accentLast = true } = {}) {
   const el = h("div", { class: "hl", style: { fontSize: px(size), fontWeight: weight, letterSpacing: `${tracking}em`, lineHeight: lh, textAlign: align } });
   const words = [];
-  for (const line of lines) {
+  lines.forEach((line, li) => {
     const row = h("div", { class: "hl-row" });
-    line.split(" ").forEach((w, i) => {
+    const parts = line.split(" ");
+    parts.forEach((w, i) => {
       if (i) row.append(document.createTextNode(" "));
-      const inner = h("span", { class: "hl-in", html: dotify(w) });
+      const last = accentLast && li === lines.length - 1 && i === parts.length - 1;
+      const inner = h("span", { class: last ? "hl-in acc" : "hl-in", html: dotify(w) });
       row.append(h("span", { class: "hl-mask" }, inner));
       words.push(inner);
     });
     el.append(row);
-  }
+  });
   return { el, words };
 }
 const HIDE = 128; // % of a word's height that puts it fully below its mask
@@ -290,615 +292,12 @@ function scene(id, t0, t1, z, build) {
   SCENES.push({ el, t0, t1, upd: build(el) });
 }
 
-// ---------------------------------------------------------------- S1 · the hook (0–5 s)
-scene("s1", 0, 5.3, 1, (root) => {
-  const C = CUES.s1;
-  const wrap = abs({ left: "0", top: "0", width: "1920px", height: "1080px", transformOrigin: "960px 540px" });
-  const mkLines = (animated) => {
-    const box = abs({ left: "0", top: "0", width: "1920px", height: "1080px" });
-    const style = { position: "absolute", left: "0", width: "1920px", textAlign: "center", fontSize: "172px", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1, whiteSpace: "nowrap" };
-    const l1 = h("div", { style: { ...style, top: "373px" }, html: dotify("ATTENTION IS") });
-    const l2 = h("div", { style: { ...style, top: "551px" } });
-    const chars = [];
-    for (const ch of "THE NEW CURRENCY.") {
-      const c = h("span", { class: "ch" + (ch === "." ? " dot" : ""), text: ch });
-      l2.append(c);
-      chars.push(c);
-    }
-    box.append(l1, l2);
-    return { box, l1, l2, chars, animated };
-  };
-  const base = mkLines(true);
-  const fitTo = 1680;
-  const masks = [abs({ background: BG }), abs({ background: BG })];
-  const g1 = mkLines(false);
-  const g2 = mkLines(false);
-  g1.box.style.color = ACCENT;
-  g1.box.style.opacity = 0.9;
-  wrap.append(base.box, ...masks, g1.box, g2.box);
-  root.append(wrap);
-  // Shrink both lines together if the longer one is too wide.
-  for (const L of [base, g1, g2]) {
-    const width = L.l2.scrollWidth;
-    if (width > fitTo) for (const l of [L.l1, L.l2]) l.style.fontSize = px(172 * (fitTo / width));
-  }
+// ---------------------------------------------------------------- backdrop: charcoal, lit from the centre
+const backdrop = abs({ left: "0", top: "0", width: "1920px", height: "1080px", zIndex: 0, background: "radial-gradient(ellipse 74% 70% at 50% 45%, #1f1f24 0%, #16161a 40%, #0d0d10 74%, #09090b 100%)" });
+stage.prepend(backdrop);
 
-  return (t) => {
-    // Line 1: impact with tracking-in and motion blur.
-    const p1 = prog(t, C.line1, C.line1 + 0.6);
-    base.l1.style.opacity = clamp((t - C.line1) / 0.05);
-    base.l1.style.transform = `scale(${lerp(1.24, 1, E.outExpo(p1)).toFixed(4)})`;
-    base.l1.style.letterSpacing = `${lerp(0.03, -0.03, E.outExpo(p1)).toFixed(4)}em`;
-    blur(base.l1, (1 - E.outCubic(prog(t, C.line1, C.line1 + 0.32))) * 16);
-    // Line 2: characters cascade in.
-    base.chars.forEach((c, i) => {
-      const t0 = C.line2 + i * 0.022;
-      const p = prog(t, t0, t0 + 0.55);
-      c.style.opacity = clamp((t - t0) / 0.05);
-      c.style.transform = `translateY(${((1 - E.outExpo(p)) * 0.2).toFixed(4)}em) scale(${lerp(1.4, 1, E.outExpo(p)).toFixed(4)})`;
-      blur(c, (1 - E.outCubic(prog(t, t0, t0 + 0.3))) * 12);
-    });
-    // Slow push-in, then a horizontal stretch into the flash.
-    const push = 1 + 0.055 * E.inOutSine(prog(t, C.line1, C.exit));
-    const pe = prog(t, C.exit, C.exit + 0.33);
-    wrap.style.transform = `scale(${push.toFixed(4)}) scaleX(${lerp(1, 1.4, E.inExpo(pe)).toFixed(4)})`;
-    wrap.style.opacity = 1 - prog(t, C.exit + 0.16, C.exit + 0.34);
-    blur(wrap, E.inCubic(pe) * 12);
-    // Digital distortion: two-frame slice displacement on the glitch hits.
-    const gi = C.glitches.findIndex((g) => t >= g - 1e-6 && t < g + 2 / 30 - 1e-6);
-    const on = gi >= 0;
-    for (const e of [g1.box, g2.box, ...masks]) show(e, on);
-    if (on) {
-      const seed = gi * 17 + Math.floor((t - C.glitches[gi]) * 30 + 1e-6);
-      const bands = [0, 1].map((j) => {
-        const y = 400 + hash(seed * 5 + j) * 300;
-        const hh = j ? 10 + hash(seed * 7 + j) * 26 : 18 + hash(seed * 11 + j) * 44;
-        return [y, hh, (hash(seed * 13 + j) - 0.5) * (j ? 90 : 60)];
-      });
-      [g1.box, g2.box].forEach((box, j) => {
-        const [y, hh, dx] = bands[j];
-        box.style.clipPath = `inset(${y}px 0 ${1080 - y - hh}px 0)`;
-        box.style.transform = `translateX(${dx}px)`;
-        place(masks[j], 0, y, 1920, hh);
-      });
-      base.box.style.transform = `translateX(${((hash(seed * 19) - 0.5) * 12).toFixed(1)}px)`;
-    } else base.box.style.transform = "none";
-  };
-});
-
-// ---------------------------------------------------------------- flash (S1 → S2)
-const flash = abs({});
-flash.id = "flash";
-stage.append(flash);
-function updFlash(t) {
-  const f = CUES.s1.flash;
-  const a = f - 0.33;
-  const b = f - 0.22;
-  const d = f + 0.36;
-  if (t < a || t >= d) return show(flash, false);
-  show(flash, true);
-  let w = 1920;
-  let hh;
-  let op = 1;
-  if (t < b) {
-    w = 1920 * E.outExpo(prog(t, a, b));
-    hh = 2;
-  } else if (t < f) hh = lerp(2, 1500, E.inExpo(prog(t, b, f)));
-  else {
-    hh = 1500;
-    op = 1 - E.outCubic(prog(t, f, d));
-  }
-  place(flash, 960 - w / 2, 540 - hh / 2, w, hh);
-  flash.style.opacity = op;
-}
-
-// ---------------------------------------------------------------- S2 · the crypto world (5–10.8 s)
-const TICKERS = ["GLCAT", "ORBF", "LUNLL", "VGOOSE", "EMBR", "COYO", "MMAM", "PIGEON", "DDOLPH", "SLOTH", "GGOAT", "MINK", "STSHRK", "MOOSE", "TSNAIL", "HERON", "FROST", "KOI", "OTTR", "MOTH", "OWLZ", "CRAB", "YAKK", "LYNX", "BISON", "FINCH", "TAPIR", "ORCA", "NEWT", "DINGO", "KIWI", "IBEX", "QUOKA", "LEMUR", "PUFFN", "WOMBT", "GECKO", "MANTA", "RAVN", "BEAVR"];
-const HANDLES = ["minttv89", "orbitclips61", "lumencuts70", "vectortv70", "mintmedia28", "signalstudio24", "novaclips", "driftdaily51"];
-
-function camTransform(el, sc, fx, fy, rot = 0) {
-  el.style.transform = `translate(${(960 - fx * sc).toFixed(2)}px, ${(540 - fy * sc).toFixed(2)}px) scale(${sc.toFixed(4)})` + (rot ? ` rotate(${rot}deg)` : "");
-}
-
-function chartShot(cfg) {
-  const el = h("div", { class: "shot" });
-  const cam = abs({ left: "0", top: "0", width: "1920px", height: "1080px", transformOrigin: "0 0" });
-  el.append(cam);
-  const n = cfg.n ?? 150;
-  const r = rng(cfg.seed);
-  const vals = [];
-  let v = 0;
-  for (let i = 0; i < n; i++) {
-    v += (cfg.drift ?? 0.32) + (r() - 0.5) * 2.4 + (i > n * 0.6 ? 0.35 : 0);
-    vals.push(v);
-  }
-  const lo = Math.min(...vals);
-  const hi = Math.max(...vals);
-  const X0 = 110;
-  const X1 = 1690;
-  const Y0 = 860;
-  const Y1 = 270;
-  const pts = vals.map((vv, i) => [X0 + (i / (n - 1)) * (X1 - X0), Y0 - ((vv - lo) / (hi - lo)) * (Y0 - Y1)]);
-  const price = (y) => cfg.price * (1 + ((Y0 - y) / (Y0 - Y1)) * cfg.mult);
-  const svg = s("svg", { width: 1920, height: 1080, viewBox: "0 0 1920 1080", style: "position:absolute;left:0;top:0;overflow:visible" });
-  const gid = `cg${cfg.seed}`;
-  svg.append(
-    s("defs", {}, s("linearGradient", { id: gid, x1: 0, x2: 0, y1: 0, y2: 1 }, s("stop", { offset: 0, "stop-color": ACCENT, "stop-opacity": 0.2 }), s("stop", { offset: 1, "stop-color": ACCENT, "stop-opacity": 0 }))),
-  );
-  const grid = s("g", { stroke: "#16161b", "stroke-width": 1 });
-  for (let y = 196; y <= 900; y += 88) grid.append(s("line", { x1: -400, x2: 2400, y1: y, y2: y }));
-  for (let x = X0; x <= 2400; x += 198) grid.append(s("line", { x1: x, x2: x, y1: 150, y2: 1010, stroke: "#101014" }));
-  svg.append(grid);
-  const axis = s("g", { "font-family": "Geist Mono", "font-size": 16, fill: "#52525b" });
-  for (let y = 196; y <= 900; y += 88) axis.append(s("text", { x: 1835, y: y + 5, "text-anchor": "end" }, document.createTextNode(price(y).toFixed(6))));
-  svg.append(axis);
-  const vols = s("g");
-  const volBars = pts.map(([x]) => {
-    const hh = 10 + r() * 60;
-    const b = s("rect", { x: x - 3.5, y: 1000 - hh, width: 7, height: hh, fill: "#202027" });
-    vols.append(b);
-    return b;
-  });
-  const area = s("path", { fill: `url(#${gid})` });
-  const line = s("path", { fill: "none", stroke: ACCENT, "stroke-width": 3.2, "stroke-linejoin": "round", "stroke-linecap": "round" });
-  const candles = s("g");
-  const candleEls = [];
-  if (cfg.mode === "candles") {
-    const per = 3;
-    for (let c = 0; c * per < n - 1; c++) {
-      const seg = pts.slice(c * per, c * per + per + 1);
-      const o = seg[0][1];
-      const cl = seg[seg.length - 1][1];
-      const top = Math.min(...seg.map((q) => q[1])) - 6 - r() * 10;
-      const bot = Math.max(...seg.map((q) => q[1])) + 6 + r() * 10;
-      const x = seg[0][0];
-      const up = cl < o;
-      const wick = s("line", { x1: x + 8, x2: x + 8, y1: top, y2: bot, stroke: up ? ACCENT : "#5a5a63", "stroke-width": 2 });
-      const body = s("rect", { x, y: Math.min(o, cl), width: 16, height: Math.max(3, Math.abs(cl - o)), fill: up ? ACCENT : "#0d0d10", stroke: up ? ACCENT : "#5a5a63", "stroke-width": 2 });
-      const g = s("g", {}, wick, body);
-      candles.append(g);
-      candleEls.push({ g, x });
-    }
-  }
-  const priceLine = s("line", { stroke: ACCENT, "stroke-opacity": 0.5, "stroke-dasharray": "6 8", "stroke-width": 1.5 });
-  const halo = s("circle", { r: 20, fill: ACCENT, opacity: 0.16 });
-  const head = s("circle", { r: 7.5, fill: ACCENT });
-  const tagRect = s("rect", { width: 152, height: 40, rx: 8, fill: ACCENT });
-  const tagText = s("text", { x: 76, y: 27, "text-anchor": "middle", "font-family": "Geist Mono", "font-size": 19, "font-weight": 600, fill: "#03140c" });
-  const tag = s("g", {}, tagRect, tagText);
-  svg.append(vols, area, cfg.mode === "candles" ? candles : line, priceLine, halo, head, tag);
-  cam.append(svg);
-  const priceEl = h("div", { class: "tnum", style: { fontSize: "80px", fontWeight: 600, letterSpacing: "-0.035em", lineHeight: 1 } });
-  const chgEl = h("div", { class: "mono", style: { fontSize: "30px", color: ACCENT } });
-  const hdr = abs(
-    { left: "110px", top: "64px" },
-    h("div", { class: "mono", style: { fontSize: "20px", color: "#71717a", letterSpacing: "0.06em" }, text: `$${cfg.ticker} / SOL · ${cfg.mode === "candles" ? "1M" : "5M"}` }),
-    h("div", { style: { display: "flex", alignItems: "baseline", gap: "22px", marginTop: "12px" } }, priceEl, chgEl),
-  );
-  if (cfg.header !== false) el.append(hdr);
-  const startPrice = price(pts[0][1]);
-  return {
-    el,
-    upd(lt, dur) {
-      const p = lerp(cfg.p0 ?? 0.3, 1, E.outCubic(clamp(lt / (dur * (cfg.drawFrac ?? 1)))));
-      const kf = p * (n - 1);
-      const i = Math.min(n - 2, Math.floor(kf));
-      const f = kf - i;
-      const hp = [lerp(pts[i][0], pts[i + 1][0], f), lerp(pts[i][1], pts[i + 1][1], f)];
-      const d = "M" + pts.slice(0, i + 1).map((q) => `${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join(" L") + ` L${hp[0].toFixed(1)} ${hp[1].toFixed(1)}`;
-      line.setAttribute("d", d);
-      area.setAttribute("d", `${d} L${hp[0].toFixed(1)} 1000 L${X0} 1000 Z`);
-      volBars.forEach((b, j) => b.setAttribute("opacity", j <= kf ? 1 : 0));
-      volBars.forEach((b, j) => b.setAttribute("fill", j > kf - 6 ? "#2b6b4f" : "#202027"));
-      candleEls.forEach((c) => c.g.setAttribute("opacity", c.x <= hp[0] ? 1 : 0));
-      head.setAttribute("cx", hp[0]);
-      head.setAttribute("cy", hp[1]);
-      halo.setAttribute("cx", hp[0]);
-      halo.setAttribute("cy", hp[1]);
-      halo.setAttribute("r", (16 + 8 * Math.abs(Math.sin(lt * 9))).toFixed(2));
-      priceLine.setAttribute("x1", hp[0]);
-      priceLine.setAttribute("x2", 1700);
-      priceLine.setAttribute("y1", hp[1]);
-      priceLine.setAttribute("y2", hp[1]);
-      tag.setAttribute("transform", `translate(1700 ${(hp[1] - 20).toFixed(1)})`);
-      const pr = price(hp[1]);
-      tagText.textContent = pr.toFixed(6);
-      priceEl.textContent = `$${pr.toFixed(6)}`;
-      chgEl.textContent = `+${((pr / startPrice - 1) * 100).toFixed(1)}%`;
-      const c = cfg.cam(lt, dur, hp);
-      camTransform(cam, c.s, c.fx, c.fy, c.rot ?? 0);
-    },
-  };
-}
-
-function counterShot(cfg) {
-  const el = h("div", { class: "shot" });
-  const cam = abs({ left: "0", top: "0", width: "1920px", height: "1080px", transformOrigin: "0 0" });
-  const label = h("div", { class: "mono", style: { position: "absolute", left: "0", width: "1920px", top: "300px", textAlign: "center", fontSize: "24px", letterSpacing: "0.34em", color: "#8b8b94" } });
-  label.innerHTML = `<span style="color:${ACCENT}">●</span>&nbsp;&nbsp;${cfg.label}`;
-  const num = h("div", { class: "tnum", style: { position: "absolute", left: "0", width: "1920px", top: "352px", textAlign: "center", fontSize: "250px", fontWeight: 700, letterSpacing: "-0.05em", lineHeight: 1 } });
-  const sub = h("div", { class: "mono tnum", style: { position: "absolute", left: "0", width: "1920px", top: "650px", textAlign: "center", fontSize: "28px", letterSpacing: "0.12em", color: "#a1a1aa" } });
-  cam.append(label, num, sub);
-  el.append(cam);
-  return {
-    el,
-    upd(lt, dur) {
-      const p = E.outExpo(clamp(lt / (dur * 0.95)));
-      num.textContent = fmtInt(lerp(cfg.from, cfg.to, p));
-      sub.textContent = `LIKES ${fmtInt(lerp(cfg.likes[0], cfg.likes[1], p))}   ·   COMMENTS ${fmtInt(lerp(cfg.comments[0], cfg.comments[1], p))}`;
-      camTransform(cam, lerp(cfg.s0, cfg.s1, E.outCubic(clamp(lt / dur))), 960, 520);
-    },
-  };
-}
-
-function tickerShot(cfg) {
-  const el = h("div", { class: "shot" });
-  const cam = abs({ left: "0", top: "0", width: "1920px", height: "1080px", transformOrigin: "0 0" });
-  const r = rng(cfg.seed);
-  const rows = [0, 1, 2].map((row) => {
-    const strip = abs({ left: "0", top: px(110 + row * 330), whiteSpace: "nowrap", display: "flex", alignItems: "baseline", filter: "url(#mbx)" });
-    for (let i = 0; i < 16; i++) {
-      const tk = TICKERS[(row * 7 + i * 3 + cfg.seed) % TICKERS.length];
-      const up = r() > 0.28;
-      const chg = (up ? "+" : "−") + (up ? 4 + r() * 320 : 1 + r() * 18).toFixed(1) + "%";
-      strip.append(
-        h("span", { style: { fontSize: "170px", fontWeight: 700, letterSpacing: "-0.05em" }, text: `$${tk}` }),
-        h("span", { class: "mono", style: { fontSize: "62px", marginLeft: "28px", color: up ? ACCENT : "#6b6b74" }, text: chg }),
-        h("span", { style: { display: "inline-block", width: "18px", height: "18px", background: up ? ACCENT : "#3f3f46", margin: "0 72px", transform: "translateY(-30px)" } }),
-      );
-    }
-    cam.append(strip);
-    return { strip, dir: row % 2 ? 1 : -1, off: -400 - r() * 1600 };
-  });
-  el.append(cam);
-  return {
-    el,
-    upd(lt) {
-      rows.forEach((rw, i) => {
-        rw.strip.style.transform = `translateX(${(rw.off + rw.dir * cfg.speed * (1 + i * 0.12) * lt - (rw.dir > 0 ? 3000 : 0)).toFixed(1)}px)`;
-      });
-      camTransform(cam, cfg.scale, 960, 540, cfg.rot);
-    },
-    blurX: cfg.blur,
-  };
-}
-
-const ICON = {
-  heart: "M12 20.6 4.6 13.4a4.7 4.7 0 0 1 6.7-6.6l.7.7.7-.7a4.7 4.7 0 0 1 6.7 6.6Z",
-  bubble: "M4 4.5h16a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H10l-5 4v-4H4A1.5 1.5 0 0 1 2.5 16V6A1.5 1.5 0 0 1 4 4.5Z",
-  share: "M13.5 4.5 21 12l-7.5 7.5v-4.2c-5.1 0-8.4 1.4-10.5 4.7.6-6.3 3.8-10.1 10.5-10.8Z",
-};
-const iconSvg = (d, color) => {
-  const e = s("svg", { width: 40, height: 40, viewBox: "0 0 24 24" }, s("path", { d, fill: color }));
-  return e;
-};
-function feedCard(type, idx) {
-  const light = type === "img";
-  const ink = light ? "#0b0b0e" : "#f4f4f5";
-  const card = h("div", { class: "card", style: { background: "#0b0b0e" } });
-  const handle = HANDLES[idx % HANDLES.length];
-  if (type === "img") {
-    card.style.background = "#cfeafb";
-    card.append(h("img", { src: "assets/glacier-cat.png", decoding: "sync", style: { position: "absolute", left: "40px", top: "150px", width: "340px", height: "340px" } }));
-  } else if (type === "chart") {
-    const r = rng(idx + 11);
-    let v = 0;
-    const pts = [];
-    for (let i = 0; i < 40; i++) {
-      v += 0.6 + (r() - 0.45) * 3;
-      pts.push(v);
-    }
-    const lo = Math.min(...pts);
-    const hi = Math.max(...pts);
-    const d = pts.map((q, i) => `${i ? "L" : "M"}${(20 + i * 9.5).toFixed(1)} ${(420 - ((q - lo) / (hi - lo)) * 230).toFixed(1)}`).join(" ");
-    card.append(
-      s("svg", { width: 420, height: 746, style: "position:absolute;left:0;top:0" }, s("path", { d, fill: "none", stroke: ACCENT, "stroke-width": 4, "stroke-linejoin": "round" })),
-      abs({ left: "30px", top: "460px", fontSize: "84px", fontWeight: 700, letterSpacing: "-0.04em", color: ACCENT }, "+312%"),
-      abs({ left: "34px", top: "560px", fontSize: "26px", fontWeight: 600, color: "#a1a1aa" }, "$ORBF"),
-    );
-  } else if (type === "caption") {
-    card.append(abs({ left: "34px", top: "170px", width: "352px", fontSize: "54px", fontWeight: 700, lineHeight: 1.02, letterSpacing: "-0.035em", textTransform: "uppercase" }, "POV: you found it at $4K market cap"));
-  } else if (type === "ticker") {
-    card.style.background = "linear-gradient(165deg, #0e2a1d 0%, #07120d 45%, #050506 80%)";
-    card.append(
-      abs({ left: "0", width: "420px", top: "250px", textAlign: "center", fontSize: "92px", fontWeight: 700, letterSpacing: "-0.05em" }, "$GLCAT"),
-      abs({ left: "0", width: "420px", top: "360px", textAlign: "center", fontSize: "26px", color: "#a1a1aa" }, "is everywhere right now"),
-    );
-  } else if (type === "wave") {
-    const bars = s("g", { fill: ACCENT });
-    const r = rng(idx * 3 + 5);
-    for (let i = 0; i < 26; i++) {
-      const hh = 20 + r() * 150 * Math.sin((i / 25) * Math.PI) + 10;
-      bars.append(s("rect", { x: 42 + i * 13.5, y: 330 - hh / 2, width: 7, height: hh, rx: 3.5, opacity: 0.35 + 0.65 * r() }));
-    }
-    card.append(s("svg", { width: 420, height: 746, style: "position:absolute;left:0;top:0" }, bars), abs({ left: "0", width: "420px", top: "460px", textAlign: "center", fontSize: "18px", color: "#71717a" }, h("span", { class: "mono", text: `original sound · @${handle}` })));
-  }
-  const avatar = abs({ position: "relative", width: "36px", height: "36px", borderRadius: "50%", background: light ? "#0b0b0e" : "#26262c", color: light ? "#cfeafb" : "#e4e4e7", fontSize: "13px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }, handle.slice(0, 2).toUpperCase());
-  avatar.style.position = "relative";
-  card.append(abs({ left: "22px", top: "22px", display: "flex", alignItems: "center", gap: "10px", fontSize: "17px", fontWeight: 600, color: ink }, avatar, `@${handle}`, h("span", { style: { fontWeight: 400, opacity: 0.6 }, text: "· 2h" })));
-  const counts = [];
-  const side = abs({ right: "18px", top: "430px", display: "flex", flexDirection: "column", alignItems: "center", gap: "20px", color: ink });
-  for (const [k, base] of [["heart", 48200 + idx * 7300], ["bubble", 1204 + idx * 311], ["share", 3118 + idx * 503]]) {
-    const c = h("div", { class: "mono", style: { fontSize: "15px", marginTop: "2px" } });
-    side.append(h("div", { style: { display: "flex", flexDirection: "column", alignItems: "center" } }, iconSvg(ICON[k], ink), c));
-    counts.push({ c, base });
-  }
-  card.append(side);
-  const caption = {
-    img: "the coldest cat on solana",
-    chart: "this chart is unreal rn",
-    caption: "watch till the end",
-    ticker: "everyone is posting about it",
-    wave: "this sound is everywhere",
-  }[type];
-  card.append(abs({ left: "22px", bottom: "40px", width: "300px", fontSize: "18px", fontWeight: 500, color: ink, lineHeight: 1.3 }, caption));
-  const bar = abs({ left: "0", bottom: "0", height: "4px", background: light ? "#0b0b0e" : "#f4f4f5", opacity: 0.75 });
-  card.append(abs({ left: "0", bottom: "0", width: "420px", height: "4px", background: light ? "rgba(0,0,0,.15)" : "rgba(255,255,255,.15)" }), bar);
-  return {
-    card,
-    upd(lt, rate = 1) {
-      counts.forEach(({ c, base }) => (c.textContent = compact(base * (1 + 0.6 * rate * lt))));
-      bar.style.width = px(420 * ((0.15 + 0.35 * idx + lt * 0.5 * rate) % 1));
-    },
-  };
-}
-function feedShot(cfg) {
-  const el = h("div", { class: "shot" });
-  const cam = abs({ left: "0", top: "0", width: "1920px", height: "1080px", transformOrigin: "0 0" });
-  el.append(cam);
-  const TYPES = ["ticker", "img", "caption", "chart", "wave"];
-  const cols = [-1040, -520, 0, 520, 1040].map((dx, ci) => {
-    const col = abs({ left: px(960 + dx - 210), top: "0", width: "420px", height: "1080px", opacity: [0.35, 0.7, 1, 0.7, 0.35][ci] });
-    const cards = [0, 1, 2, 3].map((j) => {
-      const fc = feedCard(TYPES[(ci * 2 + j + cfg.seed) % TYPES.length], ci * 4 + j);
-      col.append(fc.card);
-      return fc;
-    });
-    cam.append(col);
-    return { col, cards, speed: cfg.speed * (ci % 2 ? -0.62 : 1), phase: (ci * 311) % 782 };
-  });
-  return {
-    el,
-    upd(lt, dur) {
-      for (const c of cols) {
-        const period = 4 * 782;
-        c.cards.forEach((fc, j) => {
-          let y = (j * 782 + c.phase - c.speed * lt) % period;
-          if (y < 0) y += period;
-          fc.card.style.top = px(y - 900);
-          fc.upd(lt, cfg.rate ?? 1);
-        });
-        c.col.style.filter = cfg.blurY ? "url(#mby)" : "none";
-      }
-      const cm = cfg.cam(lt, dur);
-      camTransform(cam, cm.s, cm.fx, cm.fy, cm.rot ?? 0);
-    },
-    blurY: cfg.blurY,
-  };
-}
-
-function heatShot(cfg) {
-  const el = h("div", { class: "shot" });
-  const cam = abs({ left: "0", top: "0", width: "1920px", height: "1080px", transformOrigin: "0 0" });
-  el.append(cam);
-  const COLS = 8;
-  const ROWS = 5;
-  const G = 6;
-  const tw_ = (1920 - G * (COLS + 1)) / COLS;
-  const th = (1080 - G * (ROWS + 1)) / ROWS;
-  const r = rng(cfg.seed);
-  const tiles = [];
-  for (let j = 0; j < ROWS; j++) {
-    for (let i = 0; i < COLS; i++) {
-      const idx = j * COLS + i;
-      const tile = place(abs({ borderRadius: "10px", border: "1px solid transparent", padding: "22px 24px", overflow: "hidden" }), G + i * (tw_ + G), G + j * (th + G), tw_, th);
-      const name = h("div", { style: { fontSize: "32px", fontWeight: 700, letterSpacing: "-0.03em" }, text: `$${TICKERS[(idx + cfg.seed) % TICKERS.length]}` });
-      const pct = h("div", { class: "mono tnum", style: { fontSize: "25px", marginTop: "8px" } });
-      const mc = h("div", { class: "mono", style: { position: "absolute", left: "24px", bottom: "20px", fontSize: "15px", color: "#71717a" }, text: `MC $${(8 + r() * 180).toFixed(1)}K` });
-      tile.append(name, pct, mc);
-      cam.append(tile);
-      tiles.push({ tile, pct, base: -12 + r() * 150, amp: 6 + r() * 30, w: 3 + r() * 9, ph: r() * 6.28 });
-    }
-  }
-  return {
-    el,
-    upd(lt, dur, t) {
-      const step = Math.floor(t / 0.1);
-      tiles.forEach((tl, i) => {
-        const jump = hash(step * 131 + i) < 0.18 ? (hash(step * 977 + i) - 0.4) * 60 : 0;
-        const v = tl.base + tl.amp * Math.sin(tl.ph + tl.w * t) + jump;
-        const up = v >= 0;
-        tl.pct.textContent = `${up ? "+" : "−"}${Math.abs(v).toFixed(1)}%`;
-        tl.pct.style.color = up ? "#e4fff2" : "#71717a";
-        tl.tile.style.background = up ? `rgba(44,245,158,${(0.07 + 0.45 * clamp(v / 140)).toFixed(3)})` : "#101013";
-        tl.tile.style.borderColor = jump ? "rgba(44,245,158,.9)" : "transparent";
-      });
-      const cm = cfg.cam(lt, dur);
-      camTransform(cam, cm.s, cm.fx, cm.fy);
-    },
-  };
-}
-
-const NOTES = [
-  ["MT", "@minttv89 posted a new video", "$GLCAT · 12.4K views in the first hour"],
-  ["OR", "$ORBF is up 41% in 5 minutes", "Market cap $96.2K"],
-  ["LC", "@lumencuts70 is trending", "Your video passed 100K views"],
-  ["EM", "$EMBR hit a new all-time high", "+128% today"],
-  ["OC", "@orbitclips61 mentioned $GLCAT", "Instagram · 2.1K likes"],
-  ["VG", "$VGOOSE volume is spiking", "$184K in the last hour"],
-  ["MM", "@mintmedia28 went viral", "1.02M views · 84K likes"],
-  ["LU", "$LUNLL holders are growing", "+1,204 wallets today"],
-  ["SS", "@signalstudio24 posted a video", "Shorts · 31K views"],
-  ["CO", "$COYO is breaking out", "+62% in 15 minutes"],
-];
-function notifyShot(cfg) {
-  const el = h("div", { class: "shot" });
-  const cam = abs({ left: "0", top: "0", width: "1920px", height: "1080px", transformOrigin: "0 0" });
-  el.append(cam);
-  const grid = s("svg", { width: 1920, height: 1080, style: "position:absolute;left:0;top:0" });
-  for (let y = 60; y < 1080; y += 90) grid.append(s("line", { x1: 0, x2: 1920, y1: y, y2: y, stroke: "#0f0f13" }));
-  cam.append(grid);
-  const N = 14;
-  const toasts = [];
-  for (let k = 0; k < N; k++) {
-    const [ini, title, sub] = NOTES[(k + cfg.offset) % NOTES.length];
-    const accent = title.startsWith("$");
-    const icon = h("div", {
-      style: { width: "54px", height: "54px", flex: "0 0 54px", borderRadius: "50%", background: accent ? "rgba(44,245,158,.14)" : "#1c1c21", color: accent ? ACCENT : "#e4e4e7", fontSize: "17px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" },
-      text: ini,
-    });
-    const text = h("div", { style: { flex: "1" } }, h("div", { style: { fontSize: "24px", fontWeight: 600, letterSpacing: "-0.01em" }, text: title }), h("div", { style: { fontSize: "18px", color: "#8b8b94", marginTop: "4px" }, text: sub }));
-    const t = h("div", { class: "toast" }, icon, text, h("div", { class: "mono", style: { fontSize: "15px", color: "#71717a" }, text: "now" }));
-    t.style.left = "550px";
-    cam.append(t);
-    toasts.push({ t, at: k * cfg.every });
-  }
-  return {
-    el,
-    upd(lt, dur) {
-      toasts.forEach((ts, k) => {
-        if (lt < ts.at) return show(ts.t, false);
-        show(ts.t, true);
-        let shift = 0;
-        for (let j = k + 1; j < N; j++) if (lt >= toasts[j].at) shift += E.outExpo(prog(lt, toasts[j].at, toasts[j].at + 0.2));
-        const p = prog(lt, ts.at, ts.at + 0.2);
-        const y = 130 + shift * 116 - (1 - E.outExpo(p)) * 30;
-        ts.t.style.top = px(y);
-        ts.t.style.opacity = E.outCubic(p) * clamp(1.25 - shift * 0.11);
-        ts.t.style.transform = `scale(${lerp(0.96, 1, E.outExpo(p)).toFixed(4)})`;
-      });
-      const cm = cfg.cam(lt, dur);
-      camTransform(cam, cm.s, cm.fx, cm.fy);
-    },
-  };
-}
-
-scene("s2", 5.0, 10.8, 2, (root) => {
-  const C = CUES.s2;
-  const shotDefs = [
-    chartShot({ seed: 7, ticker: "ORBF", price: 0.00098, mult: 3.6, p0: 0.28, cam: (lt, dur) => ({ s: lerp(1.08, 1, E.outCubic(lt / dur)), fx: lerp(900, 980, lt / dur), fy: lerp(560, 520, lt / dur) }) }),
-    counterShot({ label: "VIEWS", from: 912400, to: 1284906, likes: [61200, 96210], comments: [2100, 3412], s0: 1.06, s1: 1 }),
-    tickerShot({ seed: 3, speed: 2100, scale: 1.16, rot: -6, blur: 6 }),
-    feedShot({ seed: 0, speed: 1350, rate: 1, blurY: 0, cam: (lt, dur) => ({ s: lerp(1.02, 0.97, lt / dur), fx: 960, fy: 540 }) }),
-    heatShot({ seed: 0, cam: (lt, dur) => ({ s: lerp(1.12, 1.03, E.outCubic(lt / dur)), fx: 940, fy: 520 }) }),
-    notifyShot({ offset: 0, every: 0.085, cam: (lt, dur) => ({ s: lerp(1.04, 1, lt / dur), fx: 960, fy: 520 }) }),
-    chartShot({ seed: 19, ticker: "EMBR", mode: "candles", n: 120, price: 0.0021, mult: 2.4, p0: 0.7, header: true, cam: (lt, dur, hp) => ({ s: 1.55, fx: lerp(hp[0] - 260, hp[0] - 200, lt / dur), fy: hp[1] + 60 }) }),
-    feedShot({ seed: 1, speed: 160, rate: 3, cam: (lt, dur) => ({ s: lerp(1.5, 1.42, lt / dur), fx: 960, fy: 560, rot: lerp(1.2, 0, lt / dur) }) }),
-    heatShot({ seed: 9, cam: (lt, dur) => ({ s: lerp(1.95, 1.85, lt / dur), fx: 520, fy: 330 }) }),
-    notifyShot({ offset: 4, every: 0.06, cam: (lt, dur) => ({ s: lerp(1.7, 1.6, lt / dur), fx: 960, fy: 260 }) }),
-    chartShot({ seed: 23, ticker: "COYO", mode: "candles", n: 120, price: 0.0034, mult: 2.8, p0: 0.8, header: false, cam: (lt, dur, hp) => ({ s: 2.1, fx: hp[0] - 120, fy: hp[1] + 30 }) }),
-    chartShot({ seed: 31, ticker: "VGOOSE", price: 0.0006, mult: 4.2, p0: 0.75, header: false, cam: (lt, dur, hp) => ({ s: 2.3, fx: hp[0] + 60, fy: hp[1] }) }),
-    feedShot({ seed: 2, speed: 3200, rate: 2, blurY: 14, cam: () => ({ s: 1.0, fx: 960, fy: 540 }) }),
-    tickerShot({ seed: 11, speed: 3600, scale: 1.3, rot: 5, blur: 11 }),
-    heatShot({ seed: 21, cam: () => ({ s: 1.5, fx: 1350, fy: 760 }) }),
-    feedShot({ seed: 3, speed: 90, rate: 4, cam: () => ({ s: 1.6, fx: 960, fy: 600, rot: -1.5 }) }),
-    chartShot({ seed: 7, ticker: "ORBF", price: 0.00098, mult: 3.6, p0: 0.93, header: true, cam: (lt, dur, hp) => ({ s: 1.45, fx: hp[0] - 360, fy: hp[1] + 150 }) }),
-  ];
-  const shots = shotDefs.map((sd, i) => ({ ...sd, t0: C.cuts[i], t1: C.cuts[i + 1] ?? C.freeze }));
-  const holder = abs({ left: "0", top: "0", width: "1920px", height: "1080px" });
-  shots.forEach((sh) => holder.append(sh.el));
-  const vignette = abs({ left: "0", top: "0", width: "1920px", height: "1080px", background: "radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,.55) 100%)" });
-  const scrim = abs({ left: "0", top: "0", width: "1920px", height: "1080px", background: "#000" });
-  const head = headline(["EVERYTHING MOVES", "ON ATTENTION."], { size: 138, align: "center", lh: 1.06 });
-  place(head.el, 0, 400, 1920);
-  root.append(holder, vignette, scrim, head.el);
-  fitWidth(head.el.firstChild, 1700);
-
-  return (t) => {
-    const te = Math.min(t, C.freeze);
-    let active = null;
-    for (const sh of shots) {
-      const on = te >= sh.t0 && te < sh.t1 + (sh.t1 === C.freeze ? 1 : 0);
-      show(sh.el, on);
-      if (on) active = sh;
-    }
-    if (active) {
-      active.upd(te - active.t0, active.t1 - active.t0, te);
-      mbx.setAttribute("stdDeviation", `${active.blurX ?? 0} 0`);
-      mby.setAttribute("stdDeviation", `0 ${active.blurY ?? 0}`);
-    }
-    const dimStart = C.words[0] - 0.15;
-    scrim.style.opacity = tw(te, dimStart, dimStart + 0.25, 0, 0.6);
-    holder.style.filter = te > dimStart ? `blur(${tw(te, dimStart, dimStart + 0.25, 0, 2.5).toFixed(2)}px)` : "none";
-    animWords(head.words, te, 0, { times: C.words, dur: 0.5, bl: 10 });
-    const push = 1 + 0.045 * E.inOutSine(prog(te, C.words[0], C.freeze));
-    head.el.style.transform = `scale(${push.toFixed(4)})`;
-    head.el.style.transformOrigin = "960px 130px";
-  };
-});
-
-// ---------------------------------------------------------------- S3 · the opportunity (11–16.5 s)
-const LINE_Y = 560;
-const SPLIT = { top: LINE_Y, bottom: LINE_Y };
-scene("s3", 11.3, 16.6, 5, (root) => {
-  const C = CUES.s3;
-  const cam = abs({ left: "0", top: "0", width: "1920px", height: "1080px", transformOrigin: "960px 540px" });
-  const mask = abs({ left: "0", top: "360px", width: "1920px", height: px(LINE_Y - 8 - 360), overflow: "hidden" });
-  const text = h("div", { style: { position: "absolute", left: "0", width: "1920px", top: px(LINE_Y - 8 - 360 - 150), textAlign: "center", fontSize: "124px", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1, whiteSpace: "nowrap", textTransform: "uppercase" } });
-  const chars = [];
-  for (const ch of "SO WHY NOT COMPETE FOR IT?") {
-    const c = h("span", { class: "ch" + (ch === "?" ? " dot" : ""), text: ch });
-    text.append(c);
-    chars.push(c);
-  }
-  mask.append(text);
-  const line = abs({ height: "2px", background: ACCENT, boxShadow: "0 0 14px rgba(44,245,158,.55)" });
-  const headDot = abs({ width: "12px", height: "12px", borderRadius: "50%", background: "#eafff5", boxShadow: "0 0 18px 6px rgba(44,245,158,.75)" });
-  const top = abs({ height: "2px", left: "0", width: "1920px", background: ACCENT, boxShadow: "0 0 16px rgba(44,245,158,.6)" });
-  const bot = abs({ height: "2px", left: "0", width: "1920px", background: ACCENT, boxShadow: "0 0 16px rgba(44,245,158,.6)" });
-  cam.append(mask, line, headDot);
-  root.append(cam, top, bot);
-  if (text.scrollWidth > 1660) text.style.fontSize = px(124 * (1660 / text.scrollWidth));
-  const headX = (t) => 1920 * E.outCubic(prog(t, C.line, C.lineEnd));
-  const charT = chars.map((c) => {
-    const r = c.getBoundingClientRect();
-    const x = clamp((r.left + r.width / 2 - 40) / 1920, 0, 0.999);
-    return C.line + (1 - Math.cbrt(1 - x)) * (C.lineEnd - C.line);
-  });
-
-  return (t) => {
-    // Text rises out of the line as its head passes, sinks back before the reveal.
-    chars.forEach((c, i) => {
-      let y;
-      if (t < C.textOut) y = (1 - E.outExpo(prog(t, charT[i], charT[i] + 0.55))) * 140;
-      else y = E.inCubic(prog(t, C.textOut + i * 0.006, C.textOut + i * 0.006 + 0.28)) * 140;
-      c.style.transform = `translateY(${y.toFixed(2)}px)`;
-      blur(c, t < C.textOut ? (1 - E.outCubic(prog(t, charT[i], charT[i] + 0.3))) * 6 : 0);
-    });
-    cam.style.transform = `scale(${(1 + 0.035 * E.inOutSine(prog(t, C.lineEnd, C.contract))).toFixed(4)})`;
-    let x0 = 0;
-    let x1 = headX(t);
-    let thick = 2;
-    if (t >= C.contract) {
-      const p = E.inExpo(prog(t, C.contract, C.reveal - 0.04));
-      x0 = lerp(0, 900, p);
-      x1 = lerp(1920, 1020, p);
-      thick = lerp(2, 3, p);
-    }
-    const drawing = t < C.reveal;
-    show(line, drawing && t >= C.line);
-    place(line, x0, LINE_Y - thick / 2, Math.max(0, x1 - x0), thick);
-    show(headDot, t >= C.line && t < C.lineEnd + 0.05);
-    place(headDot, x1 - 6, LINE_Y - 6);
-    // The line snaps across and splits, opening onto the logo (S4 is clipped to the gap).
-    const sp = E.outExpo(prog(t, C.reveal, C.reveal + 0.5));
-    const d = sp * 640;
-    SPLIT.top = LINE_Y - d;
-    SPLIT.bottom = LINE_Y + d;
-    const on = t >= C.reveal;
-    show(top, on);
-    show(bot, on);
-    const op = 1 - prog(t, C.reveal + 0.22, C.reveal + 0.5);
-    top.style.top = px(SPLIT.top - 1);
-    bot.style.top = px(SPLIT.bottom - 1);
-    top.style.opacity = op;
-    bot.style.opacity = op;
-  };
-});
-
-// ---------------------------------------------------------------- S4 · the reveal (16–21 s)
+// ---------------------------------------------------------------- site header logo (target of the match cut)
 const HEADER = { symLeft: 384, symTop: 18, symH: 19, wordInkLeft: 412.5, wordCapTop: 21.5, wordSize: 15 };
-let fontMetrics;
 function measureFont() {
   const c = document.createElement("canvas").getContext("2d");
   c.font = "600 1000px Geist";
@@ -906,104 +305,222 @@ function measureFont() {
   const v = c.measureText("V");
   return { A: m.fontBoundingBoxAscent / 1000, D: m.fontBoundingBoxDescent / 1000, cap: m.actualBoundingBoxAscent / 1000, vLeft: -v.actualBoundingBoxLeft / 1000 };
 }
-scene("s4", 16.0, 21.1, 4, (root) => {
-  const C = CUES.s4;
-  fontMetrics = measureFont();
-  const SYM_HGT = 330;
-  const sym = buildSymbol(SYM_HGT, { lattice: true, sweeps: true, id: "s4" });
-  const k0 = sym.k;
-  const symLeft0 = 960 - (SYM_W * k0) / 2;
-  const symTop0 = 265;
-  const cam = abs({ left: "0", top: "0", width: "1920px", height: "1080px", transformOrigin: "960px 540px" });
-  const glow = abs({ left: px(960 - 700), top: px(430 - 700), width: "1400px", height: "1400px", background: "radial-gradient(circle, rgba(44,245,158,.16) 0%, rgba(44,245,158,.05) 30%, rgba(44,245,158,0) 62%)" });
-  place(sym.wrap, symLeft0, symTop0);
-  // Wordmark: clipped letters on one baseline (same type settings as the site header).
-  const WORD = 96;
-  const PAD = 0.18;
-  const word = abs({ top: "0", left: "0", fontSize: px(WORD), fontWeight: 600, letterSpacing: "0.16em", lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", padding: `${PAD}em 0`, transformOrigin: "0 0" });
+const FONT = measureFont();
+
+// ---------------------------------------------------------------- S1 · logo (0–3.75 s)
+const C1 = CUES.s1;
+scene("s1", 0, C1.exit + 0.5, 1, (root) => {
+  const SYM = 250;
+  const sym = buildSymbol(SYM, { lattice: true, sweeps: true, id: "s1" });
+  const top = 268;
+  place(sym.wrap, 960 - (SYM_W * sym.k) / 2, top);
+  const cy = top + SYM / 2;
+  const glow = abs({ left: px(960 - 700), top: px(cy - 700), width: "1400px", height: "1400px", background: "radial-gradient(circle, rgba(44,245,158,.14) 0%, rgba(44,245,158,.045) 30%, rgba(44,245,158,0) 60%)" });
+  const word = h("div", { style: { position: "absolute", left: "0", width: "1920px", top: "566px", textAlign: "center", fontSize: "68px", fontWeight: 600, letterSpacing: "0.16em", paddingLeft: "0.16em", lineHeight: 1.3, overflow: "hidden" } });
   const letters = "VYRAL".split("").map((ch) => {
     const l = h("span", { class: "ch", text: ch });
     word.append(l);
     return l;
   });
-  const tag = h("div", { class: "mono", style: { position: "absolute", left: "0", width: "1920px", top: "778px", textAlign: "center", fontSize: "22px", letterSpacing: "0.34em", paddingLeft: "0.34em", color: "#8b8b94" }, html: 'THE VIRAL LAUNCHPAD ON SOLANA<span class="dot">.</span>' });
-  cam.append(glow, sym.wrap, word, tag);
-  root.append(cam);
+  const tag = h("div", { class: "mono", style: { position: "absolute", left: "0", width: "1920px", top: "684px", textAlign: "center", fontSize: "21px", letterSpacing: "0.34em", paddingLeft: "0.34em", color: "#9d9da6" }, html: 'THE VIRAL LAUNCHPAD ON SOLANA<span class="dot">.</span>' });
+  const group = abs({ left: "0", top: "0", width: "1920px", height: "1080px", transformOrigin: `960px ${cy}px` });
+  group.append(glow, sym.wrap, word, tag);
+  root.append(group);
+
+  return (t) => {
+    slamUnits(sym, t, C1.units, { from: 1.3, travel: 46, dur: 0.85 });
+    sym.lines.forEach((l, i) => {
+      const t0 = 0.02 + (i % 12) * 0.03;
+      l.setAttribute("stroke-dashoffset", (1 - E.outCubic(prog(t, t0, t0 + 1.3))).toFixed(4));
+    });
+    const sw = prog(t, C1.sweep, C1.sweep + 0.9);
+    sym.sweepRects[0].setAttribute("opacity", sw > 0 && sw < 1 ? 1 : 0);
+    sym.sweepRects[0].setAttribute("transform", `translate(${lerp(-260, 640, E.inOutCubic(sw)).toFixed(1)} ${SYM_H / 2}) rotate(32)`);
+    sym.sweepRects[1].setAttribute("opacity", 0);
+    glow.style.opacity = (0.2 + 0.6 * E.outCubic(prog(t, 0, 1.0)) + 0.35 * Math.sin(Math.PI * sw)).toFixed(3);
+    letters.forEach((l, i) => {
+      const t0 = C1.word + i * 0.06;
+      l.style.transform = `translateY(${((1 - E.outExpo(prog(t, t0, t0 + 0.7))) * 1.45).toFixed(4)}em)`;
+    });
+    const tp = prog(t, C1.tag, C1.tag + 0.9);
+    tag.style.clipPath = `inset(0 ${((1 - E.outCubic(tp)) * 100).toFixed(2)}% 0 0)`;
+    tag.style.opacity = tp > 0 ? 1 : 0;
+    // Focus pull in, slow push, soft exit.
+    const ex = prog(t, C1.exit, C1.exit + 0.42);
+    const sc = (1.04 - 0.04 * E.outCubic(prog(t, 0, 1.2))) * (1 + 0.025 * E.inOutSine(prog(t, 1.2, C1.exit))) * (1 - 0.04 * E.inCubic(ex));
+    group.style.transform = `scale(${sc.toFixed(4)})`;
+    blur(group, (1 - E.outCubic(prog(t, 0, 0.5))) * 6 + E.inCubic(ex) * 14);
+    group.style.opacity = (1 - E.inCubic(ex)).toFixed(3);
+  };
+});
+
+// ---------------------------------------------------------------- S2 · memes are attention (3.75–7.5 s)
+const C2 = CUES.s2;
+scene("s2", C2.a - 0.05, C2.bOut + 0.45, 2, (root) => {
+  const A = headline(["MEMES ARE", "ATTENTION."], { size: 118, align: "center", lh: 1.04 });
+  const B = headline(["ATTENTION", "DRIVES TRADING."], { size: 118, align: "center", lh: 1.04 });
+  for (const x of [A, B]) {
+    place(x.el, 0, 408, 1920);
+    x.el.style.transformOrigin = "960px 120px";
+    root.append(x.el);
+  }
+  return (t) => {
+    const opts = { stagger: 0.08, dur: 0.6, bl: 10, outDur: 0.26, outStagger: 0.03 };
+    animWords(A.words, t, C2.a, { ...opts, tout: C2.aOut });
+    animWords(B.words, t, C2.b, { ...opts, tout: C2.bOut });
+    A.el.style.transform = `scale(${(1 + 0.035 * prog(t, C2.a, C2.b)).toFixed(4)})`;
+    B.el.style.transform = `scale(${(1 + 0.035 * prog(t, C2.b, C2.bOut + 0.3)).toFixed(4)})`;
+  };
+});
+
+// ---------------------------------------------------------------- S3 · compete for trading fee rewards (7.5–11.25 s)
+const C3 = CUES.s3;
+scene("s3", C3.start - 0.05, C3.moveEnd + 0.15, 4, (root) => {
+  const head = headline(["COMPETE FOR", "TRADING FEE REWARDS."], { size: 88, align: "center", lh: 1.04 });
+  place(head.el, 0, 132, 1920);
+  const sub = h("div", { class: "mono", style: { position: "absolute", left: "0", width: "1920px", top: "352px", textAlign: "center", fontSize: "21px", letterSpacing: "0.16em", paddingLeft: "0.16em", color: "#a1a1aa" }, html: 'WHILE MAKING THE COIN EVEN MORE <span class="acc">VIRAL</span><span class="dot">.</span>' });
+  // Diagram: trading fees → VYRAL → top creators.
+  const Y = 676;
+  const AX = 540;
+  const BX = 960;
+  const CX = 1390;
+  const svg = s("svg", { width: 1920, height: 1080, style: "position:absolute;left:0;top:0;overflow:visible" });
+  const AB = [AX + 72, BX - 88];
+  const lineAB = s("line", { x1: AB[0], y1: Y, x2: AB[1], y2: Y, stroke: "#3a3a42", "stroke-width": 1.5, pathLength: 1, "stroke-dasharray": "1 1", "stroke-dashoffset": 1 });
+  svg.append(lineAB);
+  const DOTS = [[0, 0]];
+  for (let i = 0; i < 6; i++) DOTS.push([36 * Math.cos((i * Math.PI) / 3), 36 * Math.sin((i * Math.PI) / 3)]);
+  for (let i = 0; i < 12; i++) DOTS.push([72 * Math.cos((i * Math.PI) / 6 + Math.PI / 12), 72 * Math.sin((i * Math.PI) / 6 + Math.PI / 12)]);
+  const TARGETS = [10, 11, 12, 4, 13, 14, 15];
+  const bez = (q, u) => {
+    const v = 1 - u;
+    return [0, 1].map((k) => v * v * v * q[0][k] + 3 * v * v * u * q[1][k] + 3 * v * u * u * q[2][k] + u * u * u * q[3][k]);
+  };
+  const fans = TARGETS.map((di) => {
+    const [dx, dy] = DOTS[di];
+    const p0 = [BX + 88, Y];
+    const p3 = [CX + dx - 10, Y + dy];
+    const q = [p0, [p0[0] + 150, Y], [p3[0] - 170, p3[1]], p3];
+    const path = s("path", { d: `M${q[0]} C${q[1]} ${q[2]} ${q[3]}`, fill: "none", stroke: "#3a3a42", "stroke-width": 1.4, pathLength: 1, "stroke-dasharray": "1 1", "stroke-dashoffset": 1 });
+    svg.append(path);
+    return { path, q, di };
+  });
+  const dots = DOTS.map(([dx, dy]) => {
+    const c = s("circle", { cx: CX + dx, cy: Y + dy, r: 8, fill: "#2c2c33", opacity: 0 });
+    svg.append(c);
+    return c;
+  });
+  const particle = () => {
+    const c = s("circle", { r: 3.4, fill: ACCENT, opacity: 0 });
+    svg.append(c);
+    return c;
+  };
+  const abParticles = Array.from({ length: 5 }, particle);
+  const fanParticles = fans.map(() => [particle(), particle()]);
+  const tile = (x, size, inner, border) => {
+    const e = place(abs({ borderRadius: px(size * 0.24), background: "#111114", border: `1px solid ${border}`, display: "flex", alignItems: "center", justifyContent: "center" }), x - size / 2, Y - size / 2, size, size);
+    if (inner) e.append(inner);
+    return e;
+  };
+  const chart = s("svg", { width: 54, height: 40, viewBox: "0 0 54 40" }, s("path", { d: "M3 33 L14 25 L22 28 L33 15 L41 18 L51 6", fill: "none", stroke: ACCENT, "stroke-width": 3, "stroke-linecap": "round", "stroke-linejoin": "round" }), s("circle", { cx: 51, cy: 6, r: 3.5, fill: ACCENT }));
+  const nodeA = tile(AX, 112, chart, "#2a2a31");
+  const nodeB = tile(BX, 140, null, "rgba(44,245,158,.55)");
+  nodeB.style.boxShadow = "0 0 60px rgba(44,245,158,.14)";
+  const label = (x, title, subText) =>
+    abs({ left: px(x - 200), width: "400px", top: px(Y + 104), textAlign: "center" }, h("div", { style: { fontSize: "21px", fontWeight: 500, color: "#e4e4e7" }, text: title }), h("div", { style: { fontSize: "15px", color: "#71717a", marginTop: "6px" }, text: subText }));
+  const labA = label(AX, "Trading fees", "from every trade");
+  const labC = label(CX, "Top creators", "highest Viral Scores");
+  // The VYRAL node's symbol and name fly into the site header (match cut into the product).
+  const BSYM = 60;
+  const bsym = buildSymbol(BSYM, { id: "s3b" });
+  const bk = bsym.k;
+  const bLeft = BX - (SYM_W * bk) / 2;
+  const bTop = Y - BSYM / 2;
+  place(bsym.wrap, bLeft, bTop);
+  const WORD = 22;
+  const PAD = 0.18;
+  const word = abs({ left: "0", top: "0", fontSize: px(WORD), fontWeight: 600, letterSpacing: "0.16em", lineHeight: 1, whiteSpace: "nowrap", padding: `${PAD}em 0`, transformOrigin: "0 0" });
+  word.textContent = "VYRAL";
+  root.append(svg, nodeA, nodeB, labA, labC, head.el, sub, bsym.wrap, word);
   const wordW = word.getBoundingClientRect().width;
-  const wordLeft0 = 960 - (wordW - 0.16 * WORD) / 2;
-  const wordTop0 = 638;
+  const wordLeft0 = BX - (wordW - 0.16 * WORD) / 2;
+  const wordTop0 = Y + 96;
   place(word, wordLeft0, wordTop0);
-  // Cap-top offset of the wordmark box (line-height 1 plus vertical padding).
-  const capOff = (F) => F * (PAD + (1 + fontMetrics.A - fontMetrics.D) / 2 - fontMetrics.cap);
-  const word0 = { x: wordLeft0, y: wordTop0, F: WORD };
-  const wordEnd = { x: HEADER.wordInkLeft - fontMetrics.vLeft * HEADER.wordSize, y: HEADER.wordCapTop - capOff(HEADER.wordSize), F: HEADER.wordSize };
+  const capOff = (F) => F * (PAD + (1 + FONT.A - FONT.D) / 2 - FONT.cap);
+  const wordEnd = { x: HEADER.wordInkLeft - FONT.vLeft * HEADER.wordSize, y: HEADER.wordCapTop - capOff(HEADER.wordSize), F: HEADER.wordSize };
   const symEnd = { x: HEADER.symLeft, y: HEADER.symTop, k: HEADER.symH / SYM_H };
 
   return (t) => {
-    const [u0] = C.units;
-    slamUnits(sym, t, C.units);
-    sym.lines.forEach((l, i) => {
-      const t0 = u0 + 0.12 + (i % 12) * 0.02;
-      l.setAttribute("stroke-dashoffset", (1 - E.outCubic(prog(t, t0, t0 + 0.75))).toFixed(4));
+    const fadeOut = 1 - prog(t, C3.out, C3.out + 0.25);
+    animWords(head.words, t, C3.start, { tout: C3.out, stagger: 0.07, dur: 0.6, outDur: 0.28 });
+    const sp = prog(t, C3.sub, C3.sub + 0.7);
+    sub.style.opacity = (E.outCubic(sp) * fadeOut).toFixed(3);
+    sub.style.clipPath = `inset(0 ${((1 - E.outCubic(sp)) * 100).toFixed(2)}% 0 0)`;
+    const nodeIn = (el, t0, fade = fadeOut) => {
+      const p = prog(t, t0, t0 + 0.55);
+      el.style.opacity = (E.outCubic(p) * fade).toFixed(3);
+      el.style.transform = `translateY(${((1 - E.outExpo(p)) * 16).toFixed(2)}px) scale(${lerp(0.94, 1, E.outExpo(p)).toFixed(4)})`;
+    };
+    nodeIn(nodeA, C3.nodes[0]);
+    nodeIn(labA, C3.nodes[0] + 0.05);
+    nodeIn(nodeB, C3.nodes[1], 1 - prog(t, C3.out + 0.05, C3.out + 0.3));
+    nodeIn(labC, C3.nodes[2] + 0.05);
+    dots.forEach((d, i) => d.setAttribute("opacity", (E.outCubic(prog(t, C3.nodes[2] + i * 0.015, C3.nodes[2] + i * 0.015 + 0.4)) * fadeOut).toFixed(3)));
+    TARGETS.forEach((di, k) => {
+      const tl = C3.light + k * 0.12;
+      const lp = prog(t, tl, tl + 0.35);
+      dots[di].setAttribute("fill", t >= tl ? ACCENT : "#2c2c33");
+      dots[di].setAttribute("r", (8 + 3 * Math.sin(Math.PI * lp)).toFixed(2));
     });
-    const sw = prog(t, C.sweep, C.sweep + 0.85);
-    sym.sweepRects[0].setAttribute("opacity", sw > 0 && sw < 1 ? 1 : 0);
-    sym.sweepRects[0].setAttribute("transform", `translate(${lerp(-260, 640, E.inOutCubic(sw)).toFixed(1)} ${SYM_H / 2}) rotate(32)`);
-    const sw2 = prog(t, C.sweep + 2.3, C.sweep + 3.2);
-    sym.sweepRects[1].setAttribute("opacity", sw2 > 0 && sw2 < 1 ? 1 : 0);
-    sym.sweepRects[1].setAttribute("transform", `translate(${lerp(-260, 640, E.inOutCubic(sw2)).toFixed(1)} ${SYM_H / 2}) rotate(32)`);
-    const impact = Math.max(...C.units.map((tu) => (t >= tu ? Math.exp(-(t - tu) / 0.35) : 0)));
-    glow.style.opacity = (0.35 + 0.65 * impact + 0.35 * Math.sin(Math.PI * sw)) * (1 - prog(t, C.move, C.move + 0.3));
-    letters.forEach((l, i) => {
-      const t0 = C.word + i * 0.045;
-      l.style.transform = `translateY(${((1 - E.outExpo(prog(t, t0, t0 + 0.65))) * 1.45).toFixed(4)}em)`;
+    lineAB.setAttribute("stroke-dashoffset", (1 - E.inOutCubic(prog(t, C3.flow - 0.25, C3.flow + 0.15))).toFixed(4));
+    lineAB.setAttribute("opacity", fadeOut.toFixed(3));
+    fans.forEach((f, j) => {
+      const t0 = C3.fan + j * 0.04;
+      f.path.setAttribute("stroke-dashoffset", (1 - E.inOutCubic(prog(t, t0, t0 + 0.5))).toFixed(4));
+      f.path.setAttribute("opacity", fadeOut.toFixed(3));
     });
-    const tp = prog(t, C.tag, C.tag + 0.8);
-    tag.style.clipPath = `inset(0 ${((1 - E.outCubic(tp)) * 100).toFixed(2)}% 0 0)`;
-    tag.style.opacity = tp > 0 ? 1 - prog(t, C.move, C.move + 0.18) : 0;
-    // Camera: impact shake, slow push-in.
-    let sx = 0;
-    let sy = 0;
-    C.units.forEach((tu, i) => {
-      if (t < tu) return;
-      const a = [7, 5, 4][i] * Math.exp(-(t - tu) / 0.09);
-      sx += a * Math.sin((t - tu) * 2 * Math.PI * 23 + i);
-      sy += a * Math.cos((t - tu) * 2 * Math.PI * 19 + i * 2);
+    // Particles carry the fees along the lines.
+    const flowOn = clamp((t - C3.flow) / 0.2) * fadeOut;
+    abParticles.forEach((c, j) => {
+      const ph = ((((t - C3.flow) * 1.25 + j / 5) % 1) + 1) % 1;
+      c.setAttribute("cx", lerp(AB[0], AB[1], ph).toFixed(2));
+      c.setAttribute("cy", Y);
+      c.setAttribute("opacity", (Math.sin(Math.PI * ph) * flowOn).toFixed(3));
     });
-    const g = 1 + 0.03 * E.inOutSine(prog(t, C.word, C.move));
-    sym.lines.forEach((l) => l.parentNode && (l.parentNode.style.opacity = 1 - prog(t, C.move, C.move + 0.3)));
-    if (t < C.move) {
-      cam.style.transform = `translate(${sx.toFixed(2)}px, ${sy.toFixed(2)}px) scale(${g.toFixed(4)})`;
-      sym.wrap.style.transform = "none";
-      word.style.transform = "none";
+    const fanOn = clamp((t - C3.fan - 0.35) / 0.2) * fadeOut;
+    fanParticles.forEach((pair, j) =>
+      pair.forEach((c, m) => {
+        const ph = ((((t - C3.fan) * 0.95 + m / 2 + j * 0.07) % 1) + 1) % 1;
+        const [x, y] = bez(fans[j].q, ph);
+        c.setAttribute("cx", x.toFixed(2));
+        c.setAttribute("cy", y.toFixed(2));
+        c.setAttribute("opacity", (Math.sin(Math.PI * ph) * fanOn).toFixed(3));
+      }),
+    );
+    // VYRAL symbol and name: arrive with the node, then the match cut.
+    const pb = prog(t, C3.nodes[1], C3.nodes[1] + 0.55);
+    const fade = 1 - prog(t, C3.moveEnd - 0.05, C3.moveEnd + 0.1);
+    if (t < C3.move) {
+      const dy = (1 - E.outExpo(pb)) * 16;
+      bsym.wrap.style.transform = `translateY(${dy.toFixed(2)}px)`;
+      word.style.transform = `translateY(${dy.toFixed(2)}px)`;
+      bsym.wrap.style.opacity = E.outCubic(pb).toFixed(3);
+      word.style.opacity = E.outCubic(prog(t, C3.nodes[1] + 0.1, C3.nodes[1] + 0.6)).toFixed(3);
     } else {
-      // Match cut: symbol and wordmark fly into the site header's logo.
-      cam.style.transform = "none";
-      const gm = 1 + 0.03;
-      const toScreen = (x, y) => [960 + (x - 960) * gm, 540 + (y - 540) * gm];
-      const p = E.inOutCubic(prog(t, C.move, C.moveEnd));
-      const [sx0, sy0] = toScreen(symLeft0, symTop0);
-      const ks = lerp(k0 * gm, symEnd.k, p);
-      const sxp = lerp(sx0, symEnd.x, p);
-      const syp = lerp(sy0, symEnd.y, p);
-      sym.wrap.style.transform = `translate(${(sxp - symLeft0).toFixed(3)}px, ${(syp - symTop0).toFixed(3)}px) scale(${(ks / k0).toFixed(5)})`;
-      const [wx0, wy0] = toScreen(word0.x, word0.y);
-      const F = lerp(WORD * gm, wordEnd.F, p);
-      const wx = lerp(wx0, wordEnd.x, p);
-      const wy = lerp(wy0, wordEnd.y, p);
-      word.style.transform = `translate(${(wx - wordLeft0).toFixed(3)}px, ${(wy - wordTop0).toFixed(3)}px) scale(${(F / WORD).toFixed(5)})`;
+      const p = E.inOutCubic(prog(t, C3.move, C3.moveEnd));
+      const ks = lerp(bk, symEnd.k, p);
+      bsym.wrap.style.transform = `translate(${(lerp(bLeft, symEnd.x, p) - bLeft).toFixed(3)}px, ${(lerp(bTop, symEnd.y, p) - bTop).toFixed(3)}px) scale(${(ks / bk).toFixed(5)})`;
+      const F = lerp(WORD, wordEnd.F, p);
+      word.style.transform = `translate(${(lerp(wordLeft0, wordEnd.x, p) - wordLeft0).toFixed(3)}px, ${(lerp(wordTop0, wordEnd.y, p) - wordTop0).toFixed(3)}px) scale(${(F / WORD).toFixed(5)})`;
+      bsym.wrap.style.opacity = fade.toFixed(3);
+      word.style.opacity = fade.toFixed(3);
     }
-    const fadeOut = 1 - prog(t, C.moveEnd - 0.05, C.moveEnd + 0.1);
-    sym.wrap.style.opacity = fadeOut;
-    word.style.opacity = fadeOut;
-    // Opening: S4 is only visible between the split lines.
-    root.style.clipPath = t < CUES.s3.reveal + 0.5 ? `inset(${Math.max(0, SPLIT.top).toFixed(1)}px 0 ${Math.max(0, 1080 - SPLIT.bottom).toFixed(1)}px 0)` : "none";
   };
 });
 
 // ---------------------------------------------------------------- S5 · the product (21–29 s)
 const CHROME = 52;
-scene("s5", 20.5, 29.06, 3, (root) => {
+scene("s5", CUES.s3.move, CUES.s5.zoom + 0.5, 3, (root) => {
   const C = CUES.s5;
   const MINT = "B92FjGyuVmqne4R8Vp8S8h8GxKx87CferCPrTfgba4Pg";
   const tLaunchScroll = C.toLaunch + 0.3;
@@ -1082,14 +599,15 @@ scene("s5", 20.5, 29.06, 3, (root) => {
   const ripple = abs({ border: `2px solid ${ACCENT}`, borderRadius: "50%" });
   view.append(ripple, cursor);
   // Headlines and label above the window.
-  const scrim = abs({ left: "0", top: "0", width: "1920px", height: "300px", background: "linear-gradient(#050506 0%, rgba(5,5,6,.92) 48%, rgba(5,5,6,0) 100%)" });
+  const scrim = abs({ left: "0", top: "0", width: "1920px", height: "300px", background: "linear-gradient(#0c0c0e 0%, rgba(12,12,14,.9) 48%, rgba(12,12,14,0) 100%)" });
   const H = ["LAUNCH A COIN.", "GET YOUR OWN COMPETITION.", "SUBMIT YOUR VIDEOS."].map((txt) => {
     const hl = headline([txt], { size: 84 });
     place(hl.el, 192, 92);
     return hl;
   });
   const label = h("div", { class: "mono", style: { position: "absolute", right: "44px", bottom: "40px", fontSize: "14px", letterSpacing: "0.2em", color: "#8b8b94", background: "rgba(5,5,6,.86)", border: "1px solid #1d1d21", borderRadius: "8px", padding: "9px 14px 9px 17px" }, text: "PRODUCT UI · ILLUSTRATIVE DATA" });
-  root.append(cam, scrim, ...H.map((x) => x.el), label);
+  const domainTag = h("div", { class: "mono", style: { position: "absolute", left: "194px", top: "190px", fontSize: "18px", letterSpacing: "0.06em", color: "#8b8b94" }, text: "makevyral.com" });
+  root.append(cam, scrim, ...H.map((x) => x.el), label, domainTag);
   for (const x of H) fitWidth(x.el, 1520);
 
   const FULL = { vx: 0, vy: 0, s: 1 };
@@ -1175,7 +693,11 @@ scene("s5", 20.5, 29.06, 3, (root) => {
     const c = camAt(t);
     cam.style.transform = `translate(${c.vx.toFixed(2)}px, ${(c.vy - CHROME * c.s).toFixed(2)}px) scale(${c.s.toFixed(5)})`;
     win.style.borderRadius = px(tw(t, C.start, C.start + 0.4, 0, 18));
-    root.style.opacity = t < C.start ? E.inOutCubic(prog(t, CUES.s4.move + 0.3, CUES.s4.moveEnd)) : 1 - prog(t, C.zoom + 0.26, C.zoom + 0.4);
+    // The window floats in with a slight 3D tilt while it is pulled back.
+    const tilt = Math.sin(Math.PI * prog(t, C.start, C.start + 0.9));
+    win.style.transformOrigin = "50% 50%";
+    win.style.transform = tilt > 0.001 ? `perspective(2600px) rotateX(${(5 * tilt).toFixed(3)}deg) rotateY(${(-7 * tilt).toFixed(3)}deg)` : "none";
+    root.style.opacity = t < C.start ? E.inOutCubic(prog(t, CUES.s3.move + 0.15, CUES.s3.moveEnd)) : 1 - prog(t, C.zoom + 0.26, C.zoom + 0.4);
     blur(root, E.inCubic(prog(t, C.zoom + 0.1, C.zoom + 0.4)) * 22);
     if (t < C.start) cam.style.transform = `translate(0px, ${-CHROME}px) scale(1)`;
     // Pages: slide transitions with vertical motion blur.
@@ -1241,6 +763,68 @@ scene("s5", 20.5, 29.06, 3, (root) => {
     animWords(H[2].words, t, C.h3, { tout: C.zoom + 0.02, stagger: 0.07 });
     scrim.style.opacity = prog(t, C.start + 0.2, C.start + 0.5);
     label.style.opacity = prog(t, C.start + 0.5, C.start + 0.8) * (1 - prog(t, C.zoom, C.zoom + 0.15));
+    domainTag.style.opacity = prog(t, C.h1 + 0.3, C.h1 + 0.7) * (1 - prog(t, C.zoom, C.zoom + 0.15));
+  };
+});
+
+// ---------------------------------------------------------------- formula · one viral score (20.6–24.4 s)
+const CF = CUES.formula;
+scene("formula", CF.start - 0.05, CF.out + 0.45, 5, (root) => {
+  const head = headline(["ONE VIRAL SCORE."], { size: 84, align: "center" });
+  place(head.el, 0, 118, 1920);
+  const W = 1420;
+  const card = place(abs({ borderRadius: "22px", background: "rgba(9,9,11,.72)", border: "1px solid #232329", overflow: "hidden" }), 250, 270, W, 620);
+  const bar = abs({ left: "0", top: "0", width: px(W), height: "52px", borderBottom: "1px solid #1f1f25", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 26px", fontSize: "15px", color: "#71717a" });
+  bar.className = "abs mono";
+  bar.innerHTML = `<span>model viral-score-v1</span><span style="display:flex;align-items:center;gap:9px"><span style="width:7px;height:7px;border-radius:50%;background:${ACCENT};display:inline-block"></span>live config</span>`;
+  const OP = "#6b6b74";
+  const WT = "#a1a1aa";
+  const sp = (text, color) => h("span", { style: { color } }, text);
+  const term = (sym, label, color = "#f4f4f5") => {
+    const e = h("span", { style: { position: "relative", display: "inline-block", color } }, sym);
+    e.append(h("span", { style: { position: "absolute", left: "50%", top: "100%", marginTop: "20px", transform: "translateX(-50%)", fontFamily: "Geist", fontSize: "19px", letterSpacing: "0", color: "#71717a", whiteSpace: "nowrap", fontWeight: 400 }, text: label }));
+    return e;
+  };
+  const group = (...parts) => h("span", { style: { display: "inline-block" } }, ...parts);
+  // Line 1, same notation as the site: S = 0.50·V + 0.25·L + 0.25·C
+  const groups1 = [
+    group(term("S", "score", ACCENT), sp(" = ", OP)),
+    group(sp("0.50", WT), sp("·", OP), term("V", "views")),
+    group(sp(" + ", OP), sp("0.25", WT), sp("·", OP), term("L", "likes")),
+    group(sp(" + ", OP), sp("0.25", WT), sp("·", OP), term("C", "comments")),
+  ];
+  const line1 = h("div", { class: "mono", style: { position: "absolute", left: "0", width: px(W), top: "108px", textAlign: "center", fontSize: "80px", fontWeight: 500, letterSpacing: "-0.04em", whiteSpace: "pre", lineHeight: 1 } }, ...groups1);
+  // Line 2: each metric on a log scale against its reference value.
+  const sub_ = (txt) => h("sub", { style: { fontSize: "0.58em", verticalAlign: "-0.28em", color: "#8b8b94", letterSpacing: "0" } }, txt);
+  const num = h("span", { style: { display: "block", padding: "0 12px 12px" } }, "log", sub_("10"), "(1 + x · m", sub_("platform"), ")");
+  const fbar = h("span", { style: { display: "block", alignSelf: "stretch", height: "3px", background: "#a1a1aa", transformOrigin: "50% 50%" } });
+  const den = h("span", { style: { display: "block", padding: "14px 12px 0" } }, "log", sub_("10"), "(1 + x", sub_("ref"), ")");
+  const frac = h("span", { style: { display: "inline-flex", flexDirection: "column", alignItems: "center", verticalAlign: "middle" } }, num, fbar, den);
+  const g2 = group(sp("X", "#f4f4f5"), sp(" = ", OP), sp("100", ACCENT), sp(" · ", OP));
+  const line2 = h("div", { class: "mono", style: { position: "absolute", left: "0", width: px(W), top: "292px", textAlign: "center", fontSize: "56px", fontWeight: 500, letterSpacing: "-0.03em", whiteSpace: "pre", lineHeight: 1.1 } }, g2, frac);
+  const note = h("div", { style: { position: "absolute", left: "0", width: px(W), top: "520px", textAlign: "center", fontSize: "20px", lineHeight: 1.6, color: "#8b8b94" }, html: "Every metric is adjusted per platform and scored on a log scale.<br>10M views, 1M likes or 50K comments = 100 points." });
+  card.append(bar, line1, line2, note);
+  root.append(head.el, card);
+
+  return (t) => {
+    const pin = prog(t, CF.start, CF.start + 0.45);
+    const pout = prog(t, CF.out, CF.out + 0.38);
+    root.style.opacity = (E.outCubic(pin) * (1 - E.inCubic(pout))).toFixed(3);
+    blur(root, (1 - E.outCubic(pin)) * 14 + E.inCubic(pout) * 12);
+    root.style.transform = `scale(${(lerp(1.05, 1, E.outExpo(pin)) * (1 - 0.02 * pout)).toFixed(4)})`;
+    animWords(head.words, t, CF.head, { stagger: 0.07 });
+    const appear = (el, t0, dy = 18) => {
+      const p = prog(t, t0, t0 + 0.5);
+      el.style.opacity = E.outCubic(p).toFixed(3);
+      el.style.transform = `translateY(${((1 - E.outExpo(p)) * dy).toFixed(2)}px)`;
+      blur(el, (1 - E.outCubic(p)) * 6);
+    };
+    groups1.forEach((g, i) => appear(g, CF.terms[i]));
+    appear(g2, CF.log[0]);
+    appear(num, CF.log[1], 12);
+    fbar.style.transform = `scaleX(${E.inOutCubic(prog(t, CF.log[1] - 0.05, CF.log[1] + 0.35)).toFixed(4)})`;
+    appear(den, CF.log[2], -12);
+    appear(note, CF.note, 10);
   };
 });
 
@@ -1264,7 +848,7 @@ const LB = [
   { handle: "novaclips", platform: "tiktok", label: "TikTok", ago: "Published just now", s: [21, 2, 0], e: [1620000, 148000, 5120], hero: true },
 ];
 const C6 = CUES.s6;
-const ROUND = [29.0, C6.checkpoint];
+const ROUND = [C6.start + 0.2, C6.checkpoint];
 function metricsAt(row, t) {
   if (!row.hero) {
     const p = prog(t, ROUND[0], ROUND[1]);
@@ -1279,9 +863,9 @@ const HERO_KEYS = (() => {
   const sc = (i, t) => viralScore(metricsAt(LB[i], t), LB[i].platform);
   const P = C6.passes;
   return [
-    [29.0, heroScoreAt(0)],
-    [29.35, heroScoreAt(0)],
-    [30.3, 52],
+    [ROUND[0], heroScoreAt(0)],
+    [ROUND[0] + 0.35, heroScoreAt(0)],
+    [ROUND[0] + 1.3, 52],
     [P[0], sc(4, P[0]) + 0.05],
     [P[1], sc(3, P[1]) + 0.05],
     [P[2], sc(2, P[2]) + 0.04],
@@ -1327,7 +911,7 @@ const SLOT_MOVES = (() => {
     return lerp(m.from, m.to, E.inOutCubic(prog(t, m.t, m.t + 0.38)));
   };
   let prev = null;
-  for (let t = 28.8; t <= 36.3; t += 1 / 240) {
+  for (let t = C6.start - 0.2; t <= C6.expand + 0.8; t += 1 / 240) {
     const r = ranksAt(t);
     r.forEach((rk, i) => {
       if (!prev) moves[i].push({ t: -1, from: rk, to: rk });
@@ -1339,7 +923,7 @@ const SLOT_MOVES = (() => {
 })();
 
 const PANEL = { x: 700, y: 170, w: 1120, h: 740, row0: 156, rowH: 84 };
-scene("s6", 28.8, 36.2, 6, (root) => {
+scene("s6", C6.start - 0.05, CUES.s7.impact + 0.35, 6, (root) => {
   const C = C6;
   const P = PANEL;
   const panel = place(abs({ background: "#09090b", border: "1px solid #1d1d21", borderRadius: "16px", overflow: "hidden", transformOrigin: "960px 540px" }), P.x, P.y, P.w, P.h);
@@ -1387,14 +971,13 @@ scene("s6", 28.8, 36.2, 6, (root) => {
   foot.textContent = "ILLUSTRATIVE DATA · TIME-LAPSE OF ONE 6-HOUR ROUND";
   panel.append(foot);
   const words = ["VIEWS.", "LIKES.", "COMMENTS."].map((w, i) => {
-    const hl = headline([w], { size: 92 });
+    const hl = headline([w], { size: 92, accentLast: false });
     place(hl.el, 120, 300 + i * 106);
     return hl;
   });
-  const one = headline(["ONE", "VIRAL", "SCORE."], { size: 92, lh: 1.12 });
+  const one = headline(["CLIMB", "TO #1."], { size: 92, lh: 1.12 });
   place(one.el, 120, 300);
-  const formula = h("div", { class: "mono", style: { position: "absolute", left: "120px", top: "660px", fontSize: "17px", lineHeight: 1.7, letterSpacing: "0.08em", color: "#a1a1aa" }, html: `VIEWS 50% · LIKES 25% · COMMENTS 25%<br><span style="color:#71717a">ADJUSTED PER PLATFORM</span>` });
-  root.append(panel, ...words.map((w) => w.el), one.el, formula);
+  root.append(panel, ...words.map((w) => w.el), one.el);
   for (const w of [...words, one]) fitWidth(w.el, 540);
 
   return (t) => {
@@ -1408,7 +991,7 @@ scene("s6", 28.8, 36.2, 6, (root) => {
     const ms = LB.map((r) => metricsAt(r, t));
     const sc = LB.map((r, i) => viralScore(ms[i], r.platform));
     const first = t >= C.passes[4];
-    const hlCol = t < C.words[0] ? null : t < C.words[1] ? [0] : t < C.words[2] ? [1] : t < C.words[2] + 0.6 ? [2] : t < C.score ? [0, 1, 2] : [3];
+    const hlCol = t < C.words[0] ? null : t < C.words[1] ? [0] : t < C.words[2] ? [1] : t < C.words[2] + 0.6 ? [2] : t < C.climb ? [0, 1, 2] : [3];
     rows.forEach((rw, i) => {
       const slot = SLOT_MOVES.slotAt(i, t);
       rw.el.style.top = px(P.row0 + slot * P.rowH);
@@ -1437,7 +1020,7 @@ scene("s6", 28.8, 36.2, 6, (root) => {
       ch.ul.style.width = on ? px(ch.lab.getBoundingClientRect().width / (panel.getBoundingClientRect().width / P.w || 1)) : "0";
     });
     // Checkpoint countdown (time-lapse of one 6-hour round).
-    const remain = Math.max(0, Math.round(lerp(6 * 3600 - 2, 0, prog(t, 29.0, C.checkpoint))));
+    const remain = Math.max(0, Math.round(lerp(6 * 3600 - 2, 0, prog(t, ROUND[0], C.checkpoint))));
     if (t < C.checkpoint) {
       const hh = String(Math.floor(remain / 3600)).padStart(2, "0");
       const mm = String(Math.floor((remain % 3600) / 60)).padStart(2, "0");
@@ -1451,21 +1034,18 @@ scene("s6", 28.8, 36.2, 6, (root) => {
       chip.style.borderColor = "rgba(44,245,158,.45)";
     }
     // Left column: the three metrics, then one score.
-    words.forEach((w, i) => animWords(w.words, t, C.words[i], { tout: C.score - 0.42 + i * 0.05, dur: 0.5, outDur: 0.28 }));
-    animWords(one.words, t, C.score, { tout: C.expand - 0.1, stagger: 0.08 });
-    const fp = prog(t, C.formula, C.formula + 0.5);
-    formula.style.opacity = E.outCubic(fp) * (1 - prog(t, C.expand - 0.1, C.expand + 0.15));
-    formula.style.transform = `translateY(${((1 - E.outExpo(fp)) * 16).toFixed(2)}px)`;
+    words.forEach((w, i) => animWords(w.words, t, C.words[i], { tout: C.climb - 0.42 + i * 0.05, dur: 0.5, outDur: 0.28 }));
+    animWords(one.words, t, C.climb, { tout: C.expand - 0.1, stagger: 0.08 });
   };
 });
 
 // ---------------------------------------------------------------- S7 · the rewards (36–41 s)
 const CARD = { x: 880, y: 170, w: 940, h: 740 };
-const S8_SYM_H = 150;
-const S8_SYM_TOP = 255;
+const S8_SYM_H = 104;
+const S8_SYM_TOP = 270;
 const S8_K = S8_SYM_H / SYM_H;
 const S8_UNIT0 = [960 - (SYM_W * S8_K) / 2 + unitCenter(UNITS[0])[0] * S8_K, S8_SYM_TOP + unitCenter(UNITS[0])[1] * S8_K];
-scene("s7", 35.5, 41.1, 7, (root) => {
+scene("s7", CUES.s6.expand - 0.1, CUES.s8.impact + 0.3, 7, (root) => {
   const C = CUES.s7;
   const P = PANEL;
   const rect = abs({ borderRadius: "16px", border: "1px solid #232329", background: "#0b0b0d", overflow: "hidden" });
@@ -1500,7 +1080,7 @@ scene("s7", 35.5, 41.1, 7, (root) => {
       t_(L, 252, { fontSize: "16px", color: "#71717a" }, "Reward"),
       right(250, { fontSize: "12px", letterSpacing: "0.16em", color: "#71717a", fontFamily: "Geist Mono", border: "1px solid #2e2e35", borderRadius: "6px", padding: "5px 9px" }, "ILLUSTRATIVE"),
       t_(L, 278, { display: "flex", alignItems: "baseline", gap: "14px" }, h("div", { style: { display: "flex", alignItems: "baseline", gap: "14px" } }, h("span", { style: { fontSize: "100px", fontWeight: 600, letterSpacing: "-0.035em", lineHeight: 1 } }, amount), h("span", { style: { fontSize: "40px", color: "#a1a1aa", fontWeight: 500 }, text: "SOL" }))),
-      t_(L, 398, { fontSize: "17px", color: "#8b8b94", width: px(R - L) }, "47.3% of newly confirmed creator fees, the share set by the reward curve at a $28.7K market cap."),
+      t_(L, 398, { fontSize: "17px", color: "#8b8b94", width: px(R - L) }, "Paid from this coin's trading fees, straight to the creator's wallet."),
     ],
   ];
   // Transfer: reward vault → creator wallet.
@@ -1510,7 +1090,7 @@ scene("s7", 35.5, 41.1, 7, (root) => {
   const nodeB = nodeBox(walletIcon);
   const transfer = [
     place(abs({ background: "#1d1d21", height: "1px" }), L, 452, R - L),
-    t_(L, 484, { display: "flex", alignItems: "center", gap: "16px" }, h("div", { style: { display: "flex", alignItems: "center", gap: "16px" } }, nodeBox(vaultIcon), h("div", {}, h("div", { style: { fontSize: "19px", fontWeight: 500 }, text: "Reward vault" }), h("div", { style: { fontSize: "14px", color: "#71717a", marginTop: "4px" }, text: "Creator fees" })))),
+    t_(L, 484, { display: "flex", alignItems: "center", gap: "16px" }, h("div", { style: { display: "flex", alignItems: "center", gap: "16px" } }, nodeBox(vaultIcon), h("div", {}, h("div", { style: { fontSize: "19px", fontWeight: 500 }, text: "Reward vault" }), h("div", { style: { fontSize: "14px", color: "#71717a", marginTop: "4px" }, text: "Trading fees" })))),
     abs({ right: px(CARD.w - R), top: "484px", display: "flex", alignItems: "center", gap: "16px", textAlign: "right" }, h("div", {}, h("div", { class: "mono", style: { fontSize: "18px" }, text: "BXq9…KKHb" }), h("div", { style: { fontSize: "14px", color: "#71717a", marginTop: "4px" }, text: "@novaclips" })), nodeB),
   ];
   const track = place(abs({ background: "#2a2a30", height: "2px" }), 310, 515, 300);
@@ -1532,9 +1112,9 @@ scene("s7", 35.5, 41.1, 7, (root) => {
   const confirmText = t_(L + 46, 680, { fontSize: "19px", fontWeight: 500 }, "Confirmed on Solana");
   const sig = right(684, { fontSize: "14px", color: "#71717a", fontFamily: "Geist Mono" }, "Signature 5uKX…f7Qe · illustrative");
   card.append(...sections.flat(), ...transfer, track, trail, packet, ...links, ...linkFill, ...stepEls.flatMap((x) => [x.dot, x.lab]), confirmText, sig);
-  const head = headline(["COMPETE FOR", "CREATOR", "REWARDS."], { size: 88, lh: 1.1 });
-  place(head.el, 120, 290);
-  const second = h("div", { class: "mono", style: { position: "absolute", left: "120px", top: "650px", fontSize: "19px", letterSpacing: "0.12em", lineHeight: 1.65, color: "#a1a1aa" }, html: 'REWARDS POWERED BY<br>GENERATED CREATOR FEES<span class="dot">.</span>' });
+  const head = headline(["THE TOP VIDEO", "GETS PAID."], { size: 92, lh: 1.08 });
+  place(head.el, 120, 330);
+  const second = h("div", { class: "mono", style: { position: "absolute", left: "120px", top: "590px", fontSize: "19px", letterSpacing: "0.12em", lineHeight: 1.65, color: "#a1a1aa" }, html: 'REWARDS FROM THE COIN’S<br>TRADING FEES<span class="dot">.</span>' });
   root.append(rect, card, head.el, second, check);
   fitWidth(head.el, 700);
   const cardParts = [...sections.flat(), ...transfer, track, ...links, ...linkFill, ...stepEls.flatMap((x) => [x.dot, x.lab]), confirmText, sig];
@@ -1599,42 +1179,47 @@ scene("s7", 35.5, 41.1, 7, (root) => {
   };
 });
 
-// ---------------------------------------------------------------- S8 · end card (41–45 s)
-scene("s8", 40.3, 45.01, 8, (root) => {
+// ---------------------------------------------------------------- S8 · end card (37.5–45 s)
+scene("s8", CUES.s7.out - 0.05, 45.01, 8, (root) => {
   const C = CUES.s8;
   const sym = buildSymbol(S8_SYM_H, { id: "s8" });
-  const left = 960 - (SYM_W * S8_K) / 2;
-  place(sym.wrap, left, S8_SYM_TOP);
-  const glow = abs({ left: px(960 - 520), top: px(330 - 520), width: "1040px", height: "1040px", background: "radial-gradient(circle, rgba(44,245,158,.18) 0%, rgba(44,245,158,.05) 32%, rgba(44,245,158,0) 62%)", opacity: 0 });
-  const word = h("div", { style: { position: "absolute", left: "0", width: "1920px", top: "446px", textAlign: "center", fontSize: "58px", fontWeight: 600, letterSpacing: "0.16em", paddingLeft: "0.16em", lineHeight: 1.3, overflow: "hidden" } });
+  place(sym.wrap, 960 - (SYM_W * S8_K) / 2, S8_SYM_TOP);
+  const cy = S8_SYM_TOP + S8_SYM_H / 2;
+  const glow = abs({ left: px(960 - 560), top: px(cy - 560), width: "1120px", height: "1120px", background: "radial-gradient(circle, rgba(44,245,158,.16) 0%, rgba(44,245,158,.05) 30%, rgba(44,245,158,0) 60%)", opacity: 0 });
+  const word = h("div", { style: { position: "absolute", left: "0", width: "1920px", top: "392px", textAlign: "center", fontSize: "38px", fontWeight: 600, letterSpacing: "0.18em", paddingLeft: "0.18em", lineHeight: 1.3, overflow: "hidden" } });
   const letters = "VYRAL".split("").map((ch) => {
     const l = h("span", { class: "ch", text: ch });
     word.append(l);
     return l;
   });
-  const slogan = headline(["LAUNCH. CREATE. COMPETE. GET PAID."], { size: 50, tracking: -0.02, align: "center" });
-  place(slogan.el, 0, 590, 1920);
-  const solana = h("div", { class: "mono", style: { position: "absolute", left: "0", width: "1920px", top: "674px", textAlign: "center", fontSize: "22px", letterSpacing: "0.36em", paddingLeft: "0.36em", color: "#a1a1aa" }, html: 'BUILT ON SOLANA<span class="dot">.</span>' });
-  const url = h("div", { class: "mono", style: { position: "absolute", left: "0", width: "1920px", top: "930px", textAlign: "center", fontSize: "32px", letterSpacing: "0.04em", color: "#f4f4f5" }, text: "makevyral.com" });
-  const underline = abs({ top: "984px", height: "1px", background: ACCENT });
-  root.append(glow, sym.wrap, word, slogan.el, solana, url, underline);
-  const urlW = (() => {
-    const r = document.createElement("span");
-    r.className = "mono";
-    r.style.cssText = "font-size:32px;letter-spacing:0.04em;position:absolute;visibility:hidden";
-    r.textContent = "makevyral.com";
-    root.append(r);
-    const w = r.getBoundingClientRect().width;
-    r.remove();
-    return w;
-  })();
-  const sTimes = [...C.words, C.words[3] + 0.06];
+  const domainMask = h("div", { style: { position: "absolute", left: "0", width: "1920px", top: "462px", textAlign: "center", overflow: "hidden", padding: "0.06em 0 0.18em", lineHeight: 1, whiteSpace: "nowrap" } });
+  const domain = h("span", {
+    style: {
+      display: "inline-block",
+      fontSize: "128px",
+      fontWeight: 700,
+      letterSpacing: "-0.045em",
+      backgroundImage: `linear-gradient(100deg, #f4f4f5 0%, #f4f4f5 42%, #c9ffe6 47%, ${ACCENT} 50%, #c9ffe6 53%, #f4f4f5 58%, #f4f4f5 100%)`,
+      backgroundSize: "260% 100%",
+      backgroundPosition: "100% 0",
+      WebkitBackgroundClip: "text",
+      backgroundClip: "text",
+      color: "transparent",
+    },
+    text: "makevyral.com",
+  });
+  domainMask.append(domain);
+  const slogan = headline(["LAUNCH. CREATE. COMPETE. GET PAID."], { size: 28, weight: 600, tracking: 0.06, align: "center", accentLast: false });
+  place(slogan.el, 0, 668, 1920);
+  slogan.el.style.color = "#d4d4d8";
+  const solana = h("div", { class: "mono", style: { position: "absolute", left: "0", width: "1920px", top: "722px", textAlign: "center", fontSize: "17px", letterSpacing: "0.34em", paddingLeft: "0.34em", color: "#8b8b94" }, html: 'BUILT ON SOLANA<span class="dot">.</span>' });
+  root.append(glow, sym.wrap, word, domainMask, slogan.el, solana);
+  const sTimes = [0, 0.12, 0.24, 0.36, 0.4].map((d) => C.slogan + d);
 
   return (t) => {
-    // Units: tip forms out of the confirmation check, then the formation slams in.
+    // Units: the tip forms out of the payment confirmation, then the formation completes.
     const tip = CUES.s7.out + 0.6;
-    slamUnits(sym, t, [tip, C.impact, C.impact + 0.07], { from: 1.6, travel: 30, dur: 0.36 });
-    // Signal pulses travel tip → outer pair.
+    slamUnits(sym, t, [tip, C.impact, C.impact + 0.07], { from: 1.4, travel: 30, dur: 0.5 });
     let glowI = 0;
     sym.units.forEach((u, i) => {
       let I = 0;
@@ -1647,19 +1232,19 @@ scene("s8", 40.3, 45.01, 8, (root) => {
     });
     glow.style.opacity = (0.25 * prog(t, C.impact, C.impact + 0.6) + 0.6 * glowI).toFixed(3);
     letters.forEach((l, i) => {
-      const t0 = C.impact + 0.12 + i * 0.04;
+      const t0 = C.impact + 0.12 + i * 0.05;
       l.style.transform = `translateY(${((1 - E.outExpo(prog(t, t0, t0 + 0.6))) * 1.4).toFixed(4)}em)`;
     });
-    animWords(slogan.words, t, 0, { times: sTimes, dur: 0.55, bl: 6 });
+    const dp = prog(t, C.domain, C.domain + 0.75);
+    domain.style.transform = `translateY(${((1 - E.outExpo(dp)) * 112).toFixed(3)}%)`;
+    domain.style.opacity = dp > 0 ? 1 : 0;
+    blur(domain, (1 - E.outCubic(dp)) * 8);
+    domain.style.backgroundPosition = `${lerp(100, 0, E.inOutCubic(prog(t, C.sheen, C.sheen + 1.2))).toFixed(2)}% 0`;
+    animWords(slogan.words, t, 0, { times: sTimes, dur: 0.55, bl: 5 });
     const sp = prog(t, C.solana, C.solana + 0.7);
-    solana.style.opacity = E.outCubic(sp);
-    solana.style.letterSpacing = `${lerp(0.6, 0.36, E.outExpo(sp)).toFixed(4)}em`;
-    const up = prog(t, C.url, C.url + 0.6);
-    url.style.opacity = E.outCubic(up);
-    url.style.transform = `translateY(${((1 - E.outExpo(up)) * 18).toFixed(2)}px)`;
-    const ul = E.inOutCubic(prog(t, C.url + 0.2, C.url + 0.75)) * urlW;
-    place(underline, 960 - ul / 2, 984, ul);
-    root.style.opacity = 1 - prog(t, C.fade, 45.0);
+    solana.style.opacity = E.outCubic(sp).toFixed(3);
+    solana.style.letterSpacing = `${lerp(0.6, 0.34, E.outExpo(sp)).toFixed(4)}em`;
+    root.style.opacity = (1 - prog(t, C.fade, 45.0)).toFixed(3);
   };
 });
 
@@ -1688,8 +1273,7 @@ stage.append(grain);
 function updGrain(t) {
   const f = Math.round(t * CUES.fps);
   grain.style.transform = `translate(${Math.floor(hash(f * 3) * 128)}px, ${Math.floor(hash(f * 7 + 1) * 128)}px)`;
-  const black = (t < 0.6 ? 1 - prog(t, 0.45, 0.6) : 0) + (t >= CUES.s2.black && t < CUES.s3.line - 0.05 ? 1 : 0);
-  grain.style.opacity = (0.32 * (1 - clamp(black)) * (1 - prog(t, CUES.s8.fade, 45))).toFixed(3);
+  grain.style.opacity = (0.26 * (1 - prog(t, CUES.s8.fade, CUES.duration))).toFixed(3);
 }
 
 // ================================================================ frame API
@@ -1700,7 +1284,6 @@ window.renderFrame = (t) => {
     show(sc.el, on);
     if (on) sc.upd(t);
   }
-  updFlash(t);
   updGrain(t);
   return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 };
