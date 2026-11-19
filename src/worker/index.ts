@@ -24,6 +24,9 @@ async function main() {
     process.exit(1);
   }
   await ensureConfigDefaults();
+  const { applyDefaultRevisions } = await import("@/lib/services/config-revisions");
+  const revised = await applyDefaultRevisions();
+  if (revised.length) console.log(`[worker] config revisions applied: ${revised.join(", ")}`);
 
   const once = process.argv.includes("--once");
   console.log(`[worker] starting (${once ? "single pass" : "continuous"}) · cluster=${env.SOLANA_CLUSTER} · ${isDemoMode ? "DEMO providers active" : "live providers"}`);

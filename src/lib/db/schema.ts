@@ -65,6 +65,7 @@ export const fraudSignalEnum = pgEnum("fraud_signal", [
   "shared_social_account",
   "shared_network",
   "self_dealing",
+  "contract_address_removed",
 ]);
 
 export const checkpointStatusEnum = pgEnum("checkpoint_status", [
@@ -338,6 +339,8 @@ export const videos = pgTable(
     authorHandle: text(),
     socialAccountId: uuid().references(() => socialAccounts.id),
     title: text(),
+    /** Caption / title / description as last returned by the platform (checked for the contract address). */
+    postText: text(),
     thumbnailUrl: text(),
     contentFingerprint: text(),
     publishedAt: tz().notNull(),

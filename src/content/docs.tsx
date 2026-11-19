@@ -177,7 +177,7 @@ const viralScore: DocPage = {
       </Live>
       <h2 id="example">Worked example</h2>
       <p>
-        A TikTok video with 1,000,000 views, 80,000 likes and 1,500 comments under neutral multipliers and the default parameters scores: views
+        A TikTok video (TikTok is the baseline platform, multipliers 1.00) with 1,000,000 views, 80,000 likes and 1,500 comments scores: views
         85.71, likes 81.72, comments 67.60 → <strong>80.18</strong>. The full breakdown of every score is stored with the video, and every checkpoint
         stores the configuration it used.
       </p>
@@ -186,23 +186,76 @@ const viralScore: DocPage = {
         <LiveMultipliers />
       </Live>
       <p>
-        Multipliers must come from evidence, not assumptions. They start neutral (1.0). Administrators can set them in two ways, and the source of every
-        value is published in the table above:
+        A like on TikTok is not worth the same as a like on YouTube Shorts: some platforms hand out views, likes and comments far more easily than
+        others. Each platform therefore has three separate multipliers (views, likes, comments), and every value cites its source in the table above.
       </p>
-      <ol>
+      <h3 id="benchmark">Starting values: published benchmarks (benchmark-sqrt-v1)</h3>
+      <p>
+        TikTok is the baseline (1.00). For every metric, <code>multiplier = √(TikTok average per video ÷ platform average per video)</code>, using the
+        largest published cross-platform short-form studies:
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Average per video</th>
+            <th>TikTok</th>
+            <th>Instagram Reels</th>
+            <th>YouTube Shorts</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Views</td>
+            <td>32,895</td>
+            <td>23,074</td>
+            <td>5,321</td>
+            <td>Metricool, State of Short-Form Social Media 2026 (6.18M videos, 375K accounts)</td>
+          </tr>
+          <tr>
+            <td>Likes</td>
+            <td>1,097</td>
+            <td>765</td>
+            <td>88</td>
+            <td>Same study, as reported in a secondary summary</td>
+          </tr>
+          <tr>
+            <td>Comments</td>
+            <td>50</td>
+            <td>20</td>
+            <td>10</td>
+            <td>Socialinsider, TikTok vs Reels vs Shorts 2026, as reported in secondary summaries</td>
+          </tr>
+        </tbody>
+      </table>
+      <ul>
         <li>
-          <strong>Calibration from VYRAL&apos;s own verified history</strong> (<code>median-rate-ratio-v1</code>). For each platform, the median likes-per-view
-          and comments-per-view of verified, unflagged videos (≥ 1,000 views, last 90 days) is compared to the median across platforms. The ratio is shrunk
-          toward 1.0 for small samples (<code>m = raw^(n / (n + 50))</code>), clamped to [0.1, 10], and requires at least 30 videos per platform and two
-          platforms with data.
+          <strong>Why the square root?</strong> Platform averages mix very different account sizes and content types. Full ratios (YouTube likes: 12.5×)
+          would over-correct; the square root keeps the direction and dampens the size (3.53×). A typical Short still ranks below a typical TikTok video
+          with the same relative performance, but the gap narrows.
         </li>
         <li>
-          <strong>Manual values with a cited source</strong>, for example an external benchmark study. A manual value cannot be saved without a source note.
+          <strong>Where sources disagree</strong>, the multiplier stays neutral: Metricool reports Reels with the most comments per video, Socialinsider
+          reports TikTok ahead, so the Reels comment multiplier is 1.00.
         </li>
-      </ol>
+        <li>
+          <strong>X stays neutral (1.00)</strong>: no comparable published short-form benchmark exists, and X counts every post impression as a view.
+        </li>
+        <li>
+          These are published study averages applied with a documented method, not official platform figures, and they are a starting point.
+        </li>
+      </ul>
+      <h3 id="calibration">Replacing them with VYRAL&apos;s own data</h3>
+      <p>
+        Once enough verified videos exist, administrators can apply a calibration from VYRAL&apos;s own history (<code>median-rate-ratio-v1</code>): for
+        each platform, the median likes-per-view and comments-per-view of verified, unflagged videos (≥ 1,000 views, last 90 days) is compared to the
+        median across platforms. The ratio is shrunk toward 1.0 for small samples (<code>m = raw^(n / (n + 50))</code>), clamped to [0.1, 10], and
+        requires at least 30 videos per platform and two platforms with data. Because likes and comments are scored on absolute counts, the applied
+        value combines both difficulties: <code>like multiplier = view multiplier × calibrated like-rate multiplier</code>.
+      </p>
       <p>
         View multipliers are never calibrated automatically: engagement data cannot tell how strictly a platform counts a view. They change only by an
-        administrator decision with a documented rationale.
+        administrator decision with a cited source. A manual value cannot be saved without a source note.
       </p>
       <h2 id="changes">Changes</h2>
       <p>
@@ -235,6 +288,11 @@ const eligibility: DocPage = {
           parameters.
         </li>
         <li>
+          <strong>Contract address in the post.</strong> The caption, title or description must contain the coin&apos;s contract address (a link that
+          contains it counts too). VYRAL reads the post text from the platform when you submit and again at every metrics refresh; removing the address
+          later sends the entry back to human review.
+        </li>
+        <li>
           <strong>Ownership.</strong> The video must be published by a platform account linked to your wallet. Linking uses each platform&apos;s official OAuth
           flow and grants read-only access to that account&apos;s video metrics.
         </li>
@@ -246,7 +304,7 @@ const eligibility: DocPage = {
       <p>At a checkpoint, a video can win only if it is:</p>
       <ul>
         <li>Verified (not under review or rejected) and without open medium- or high-severity flags</li>
-        <li>At or above the verified view threshold</li>
+        <li>At or above the verified view threshold (500 verified views by default). If no video reaches it, nobody is paid and the fees roll over</li>
         <li>Submitted before the checkpoint time, by a creator in good standing</li>
         <li>Not submitted by the token&apos;s deployer (unless administrators change this rule)</li>
       </ul>

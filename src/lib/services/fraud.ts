@@ -10,6 +10,7 @@
 import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { getConfig } from "@/lib/config/store";
 import { schema, type Executor } from "@/lib/db";
+import { mentionsContractAddress } from "@/lib/domain/mentions";
 import type { Platform } from "@/lib/domain/platforms";
 import {
   assessFraud,
@@ -63,6 +64,7 @@ export async function evaluateVideoFraud(ex: Executor, videoId: string, now = ne
       video: schema.videos,
       launchedAt: schema.tokens.launchedAt,
       deployerWallet: schema.tokens.deployerWallet,
+      mint: schema.tokens.mint,
     })
     .from(schema.videos)
     .innerJoin(schema.competitions, eq(schema.competitions.id, schema.videos.competitionId))
@@ -124,6 +126,7 @@ export async function evaluateVideoFraud(ex: Executor, videoId: string, now = ne
         socialAccountWalletCount: socialWallets,
         networkWalletCount: networkWallets,
         isTokenDeployer: v.creatorWallet === row.deployerWallet,
+        mentionsContractAddress: v.postText === null ? null : mentionsContractAddress(v.postText, row.mint),
       },
     },
     cfg,

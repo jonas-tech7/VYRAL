@@ -62,9 +62,21 @@ export const FAQ: FaqItem[] = [
     q: "How are videos ranked?",
     a: () => (
       <p>
-        By the Viral Score. Views count the most (50% by default), likes and comments 25% each, on a logarithmic scale so that every platform is
-        compared fairly. Likes and comments only count up to a plausible share of the views, so bought engagement can&apos;t outrank real reach.{" "}
-        <Link href="/docs/viral-score">Viral Score</Link>
+        By the Viral Score. Views count the most (50% by default), likes and comments 25% each, on a logarithmic scale. Each platform has its own
+        multipliers for views, likes and comments, so the platforms are compared fairly. Likes and comments only count up to a plausible share of the
+        views, so bought engagement can&apos;t outrank real reach. <Link href="/how-it-works#score">How the Viral Score works</Link>
+      </p>
+    ),
+  },
+  {
+    id: "platform-multipliers",
+    q: "Why does a like on YouTube count more than a like on TikTok?",
+    a: () => (
+      <p>
+        Because it is harder to get. In the largest published short-form study (Metricool 2026, 6.18 million videos), a TikTok video averages 1,097
+        likes, a YouTube Short 88. VYRAL turns such differences into separate multipliers for views, likes and comments per platform, dampened with a
+        square root so no platform gets an outsized advantage. Where the data is unclear, the multiplier stays neutral, and once VYRAL has enough
+        verified videos of its own, the values are recalibrated from that data. <Link href="/how-it-works#multipliers">Platform multipliers</Link>
       </p>
     ),
   },
@@ -79,7 +91,8 @@ export const FAQ: FaqItem[] = [
     a: () => (
       <ul>
         <li>Published after the token launched, from a platform account you have linked to your wallet</li>
-        <li>Verified, with at least 5,000 verified views (the default threshold)</li>
+        <li>The coin&apos;s contract address in the caption, title or description</li>
+        <li>Verified, with at least 500 verified views. If no video reaches 500, nobody is paid and the fees roll over to the next checkpoint</li>
         <li>Submitted before the checkpoint, with no open review flags</li>
         <li>
           Not submitted by the wallet that deployed the token &mdash; deployers can&apos;t win their own competition.{" "}

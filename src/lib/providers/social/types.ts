@@ -15,6 +15,8 @@ export type ResolvedVideo = {
   authorAccountId: string;
   authorHandle: string;
   title: string | null;
+  /** Full post text as returned by the platform (title, caption, description), searched for the contract address. */
+  postText: string | null;
   thumbnailUrl: string | null;
   publishedAt: Date;
   /** "platform_api" for authorised platform data, "simulated" for the mock provider. */
@@ -32,7 +34,12 @@ export type MetricsResult = {
   shares: number;
   capturedAt: Date;
   source: string;
+  /** Latest post text when the platform returns it with the metrics (undefined: not available). */
+  postText?: string | null;
 };
+
+/** What the post is expected to reference; the simulated provider uses it to simulate post text. */
+export type ResolveContext = { contractAddress: string; symbol: string };
 
 export type MetricsRequest = {
   key: string;
@@ -68,7 +75,7 @@ export interface SocialProvider {
    * Fetches authoritative video metadata. `credentials` is the submitting
    * wallet's linked account on that platform, when one exists.
    */
-  resolve(parsed: ParsedVideoUrl, credentials: LinkedAccountCredentials | null): Promise<ResolvedVideo>;
+  resolve(parsed: ParsedVideoUrl, credentials: LinkedAccountCredentials | null, context?: ResolveContext): Promise<ResolvedVideo>;
   /** Batch metric refresh; failures are returned per key. */
   fetchMetrics(requests: MetricsRequest[]): Promise<Map<string, MetricsResult | ProviderError>>;
 }

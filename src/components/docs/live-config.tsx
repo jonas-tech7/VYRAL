@@ -82,9 +82,7 @@ export async function LiveMultipliers() {
               <td>
                 {m[p].source.kind === "calibrated"
                   ? `Calibrated (n=${fullNumber(m[p].source.sampleSize ?? 0)}, ${m[p].source.windowDays}d)`
-                  : m[p].source.kind === "manual"
-                    ? `Manual: ${m[p].source.note}`
-                    : "Neutral default"}
+                  : (m[p].source.note ?? "Neutral default")}
               </td>
             </tr>
           ))}

@@ -13,7 +13,7 @@
 import type { Platform } from "@/lib/domain/platforms";
 import { unit } from "@/lib/sim/random";
 import { simFingerprint, simHandle, simMetrics } from "@/lib/sim/social-sim";
-import type { LinkedAccountCredentials, MetricsRequest, MetricsResult, ResolvedVideo, SocialProvider } from "./types";
+import type { LinkedAccountCredentials, MetricsRequest, MetricsResult, ResolveContext, ResolvedVideo, SocialProvider } from "./types";
 import { ProviderError } from "./types";
 import { idEmbeddedTimestamp, type ParsedVideoUrl } from "./url";
 
@@ -31,6 +31,18 @@ export function simulatedPublishedAt(platform: Platform, videoId: string, now: D
   return new Date(Math.min(anchor - hours * 3_600_000 + 86_400_000, now.getTime() - 10 * 60_000));
 }
 
+/**
+ * Simulated caption. Posts mention the coin's contract address, except video
+ * IDs ending in "000", which simulate a caption without it so the rule can be
+ * seen failing in the demonstration environment.
+ */
+export function simulatedPostText(videoId: string, context: ResolveContext): string {
+  const ticker = "$" + context.symbol;
+  return videoId.endsWith("000")
+    ? `New video about ${ticker} #memecoin #solana`
+    : `${ticker} is going viral\nCA: ${context.contractAddress}\n#memecoin #solana`;
+}
+
 export class MockSocialProvider implements SocialProvider {
   readonly id = "mock" as const;
   readonly isSimulated = true;
@@ -42,7 +54,7 @@ export class MockSocialProvider implements SocialProvider {
     );
   }
 
-  async resolve(parsed: ParsedVideoUrl, credentials: LinkedAccountCredentials | null): Promise<ResolvedVideo> {
+  async resolve(parsed: ParsedVideoUrl, credentials: LinkedAccountCredentials | null, context?: ResolveContext): Promise<ResolvedVideo> {
     const now = new Date();
     const handle = parsed.handle ?? credentials?.handle ?? simHandle(parsed.platform, parsed.videoId);
     const publishedAt = idEmbeddedTimestamp(parsed.platform, parsed.videoId) ?? simulatedPublishedAt(parsed.platform, parsed.videoId, now);
@@ -55,6 +67,7 @@ export class MockSocialProvider implements SocialProvider {
       authorAccountId: simulatedAccountId(parsed.platform, handle),
       authorHandle: handle,
       title: null,
+      postText: context ? simulatedPostText(parsed.videoId, context) : null,
       thumbnailUrl: null,
       publishedAt,
       publishedAtSource: "simulated",

@@ -3,16 +3,17 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { FormationVisual } from "@/components/brand/formation";
-import { CompetitionsTable } from "@/components/competition/competitions-table";
-import { StatsSkeleton, TableSkeleton } from "@/components/competition/skeletons";
+import { LogoMark } from "@/components/brand/logo";
+import { StatsSkeleton } from "@/components/competition/skeletons";
+import { Flywheel } from "@/components/home/flywheel";
 import { DemoTag } from "@/components/ui/badge";
-import { ViralScoreSection } from "@/components/home/viral-score-section";
 import { ButtonLink } from "@/components/ui/button";
 import { Countdown } from "@/components/ui/client";
 import { Container, SectionHeader, Skeleton, TextLink } from "@/components/ui/misc";
 import { PlatformTag } from "@/components/ui/platform";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { TokenAvatar } from "@/components/ui/token-avatar";
+import { getAllConfig } from "@/lib/config/store";
 import { bpsToPct, compactNumber, fullNumber, score, shortAddress, sol, solToUsd, usd } from "@/lib/format";
 import { getCompetitionDetail, getPlatformStats, listCompetitions } from "@/lib/queries/public";
 
@@ -56,55 +57,89 @@ export default function HomePage() {
         </Suspense>
       </section>
 
-      <section className="mt-20" aria-labelledby="trending-heading">
+      <section
+        className="mt-28 grid items-center gap-16 sm:mt-36 lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-20"
+        aria-labelledby="loop-heading"
+      >
+        <div>
+          <p className="eyebrow">The attention loop</p>
+          <h2 id="loop-heading" className="mt-3 text-[36px] font-semibold leading-[1.05] tracking-[-0.035em] text-ink sm:text-[52px]">
+            Memes are attention.
+          </h2>
+          <p className="mt-5 max-w-[470px] text-[16px] leading-relaxed text-ink-2 sm:text-[17px]">
+            VYRAL turns that attention into a loop. Creators get paid for the reach they bring. The coin gets seen, talked about and traded. Its fees
+            fund the next round of rewards.
+          </p>
+          <Link
+            href="/how-it-works"
+            className="mt-7 inline-flex items-center gap-1.5 text-[14px] text-ink underline decoration-edge-strong underline-offset-4 transition-colors hover:decoration-accent"
+          >
+            How it works
+            <ArrowRight className="size-3.5" />
+          </Link>
+        </div>
+        <Flywheel className="max-w-[330px] sm:max-w-[440px]" />
+      </section>
+
+      <section className="mt-28 sm:mt-36" aria-labelledby="rules-heading">
         <SectionHeader
-          title={<span id="trending-heading">Trending competitions</span>}
-          description="Live token competitions ranked by trading activity, new entries and views."
-          action={<TextLink href="/competitions">View all</TextLink>}
+          title={<span id="rules-heading">The rules, in short</span>}
+          action={<TextLink href="/how-it-works">Read everything</TextLink>}
         />
-        <Suspense fallback={<TableSkeleton rows={8} />}>
-          <Trending />
+        <Suspense fallback={<Skeleton className="h-[132px] w-full rounded-lg" />}>
+          <RulesBand />
         </Suspense>
       </section>
 
-      <section className="mt-24" aria-labelledby="how-heading">
-        <SectionHeader
-          title={<span id="how-heading">How VYRAL works</span>}
-          action={<TextLink href="/docs">Read the documentation</TextLink>}
+      <section
+        className="relative mt-28 overflow-hidden rounded-xl border border-edge bg-raised px-6 py-16 text-center sm:mt-36 sm:py-24"
+        aria-labelledby="cta-heading"
+      >
+        <LogoMark
+          size={460}
+          className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-ink opacity-[0.035]"
         />
-        <ol className="grid gap-px overflow-hidden rounded-lg border border-edge bg-edge md:grid-cols-3">
-          {[
-            {
-              n: "01",
-              title: "Launch a token",
-              body: "Every token launched on VYRAL opens its own video competition, funded by a transparent share of the token's creator fees.",
-            },
-            {
-              n: "02",
-              title: "Create and submit videos",
-              body: "Publish on TikTok, YouTube Shorts, Instagram Reels or X after launch, then submit the link with your wallet. Platform data verifies every entry.",
-            },
-            {
-              n: "03",
-              title: "Rank at the top, get paid",
-              body: "At every payout checkpoint, the highest eligible Viral Score receives the reward on-chain. Every payout is publicly verifiable.",
-            },
-          ].map((s) => (
-            <li key={s.n} className="flex flex-col bg-canvas p-6 sm:p-7">
-              <span className="font-mono text-[12px] text-ink-4">{s.n}</span>
-              <h3 className="mt-6 text-[16px] font-semibold tracking-[-0.01em] text-ink">{s.title}</h3>
-              <p className="mt-2 text-[13.5px] leading-relaxed text-ink-2">{s.body}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section className="mt-28 sm:mt-32" aria-labelledby="score-heading">
-        <Suspense fallback={<Skeleton className="mx-auto h-[640px] w-full max-w-[880px] rounded-lg" />}>
-          <ViralScoreSection />
-        </Suspense>
+        <div className="relative">
+          <h2 id="cta-heading" className="mx-auto max-w-[620px] text-[30px] font-semibold leading-[1.1] tracking-[-0.03em] text-ink sm:text-[44px]">
+            Give your coin a reason to be talked about.
+          </h2>
+          <p className="mx-auto mt-4 max-w-[480px] text-[15.5px] leading-relaxed text-ink-2">
+            Launch on VYRAL and every creator who makes it go viral can get paid from its fees.
+          </p>
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+            <ButtonLink href="/launch" variant="primary" size="lg">
+              Launch a Coin
+            </ButtonLink>
+            <ButtonLink href="/how-it-works" variant="secondary" size="lg">
+              How it works
+            </ButtonLink>
+          </div>
+        </div>
       </section>
     </Container>
+  );
+}
+
+/** The four rules people ask about first, read from the live configuration. */
+async function RulesBand() {
+  await connection();
+  const { scoring, eligibility, payouts } = await getAllConfig();
+  const youtubeLike = scoring.value.multipliers.youtube.like;
+  const cells = [
+    { value: payouts.value.allowedIntervalsHours.map((h) => `${h}h`).join(" · "), label: "Payout rounds, chosen at launch" },
+    { value: fullNumber(eligibility.value.minVerifiedViews), label: "Verified views to get paid" },
+    { value: "CA", label: "Contract address in every post" },
+    { value: `×${youtubeLike.toFixed(2)}`, label: "A YouTube Shorts like, measured against a TikTok like" },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-edge bg-edge lg:grid-cols-4">
+      {cells.map((c, i) => (
+        <div key={c.label} className="bg-canvas px-5 py-6 sm:px-6 sm:py-7">
+          <p className={`num font-mono text-[26px] font-medium tracking-[-0.03em] sm:text-[32px] ${i === 3 ? "text-accent" : "text-ink"}`}>{c.value}</p>
+          <p className="mt-2 text-[12.5px] leading-snug text-ink-3 sm:text-[13px]">{c.label}</p>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -134,16 +169,6 @@ async function PlatformStats() {
         />
         <Stat label="Video views generated" value={compactNumber(s.totalViews)} sub={`${fullNumber(s.videosSubmitted)} videos competing`} size="lg" />
       </StatGrid>
-    </div>
-  );
-}
-
-async function Trending() {
-  await connection();
-  const { items } = await listCompetitions({ sort: "trending", limit: 8 });
-  return (
-    <div className="animate-fade-in">
-      <CompetitionsTable items={items} variant="home" now={new Date()} />
     </div>
   );
 }

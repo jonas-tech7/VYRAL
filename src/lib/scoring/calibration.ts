@@ -17,6 +17,10 @@
  * quality" in like/comment data. They remain an administrator decision and
  * should cite a source (platform view-counting definitions differ).
  *
+ * Likes and comments are scored on their absolute counts, so the multiplier
+ * that is applied combines both difficulties (see composeWithView):
+ *   like multiplier = view multiplier × calibrated like-rate multiplier
+ *
  * The output is a suggestion. Nothing changes until an administrator applies
  * it, which is versioned and audit-logged.
  */
@@ -73,6 +77,14 @@ export function median(values: number[]): number | null {
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
+
+/**
+ * The multiplier actually applied to a like or comment count: how hard views
+ * are to get on the platform × how often its viewers like or comment.
+ */
+export function composeWithView(viewMultiplier: number, rateMultiplier: number): number {
+  return clamp(round3(viewMultiplier * rateMultiplier), 0.05, 20);
+}
 
 function shrink(raw: number, n: number, k: number): number {
   const weight = n / (n + k);

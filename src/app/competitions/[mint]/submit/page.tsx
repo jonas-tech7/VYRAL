@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { SubmitVideoForm } from "@/components/competition/submit-form";
+import { CopyButton } from "@/components/ui/client";
 import { Container, KV, Panel, Skeleton } from "@/components/ui/misc";
 import { TokenAvatar } from "@/components/ui/token-avatar";
 import { getConfig } from "@/lib/config/store";
@@ -54,9 +55,17 @@ async function SubmitContent({ params }: Pick<PageProps<"/competitions/[mint]/su
         <h1 className="text-[24px] font-semibold tracking-[-0.02em] text-ink sm:text-[28px]">Submit a video for ${c.symbol}</h1>
       </div>
       <p className="mt-2 max-w-[620px] text-[14.5px] leading-relaxed text-ink-2">
-        Post a short video about {c.name} on TikTok, YouTube Shorts, Instagram Reels or X, then submit the public link. VYRAL verifies publication
-        time and ownership with platform data and tracks views, likes and comments automatically.
+        Post a short video about {c.name} on TikTok, YouTube Shorts, Instagram Reels or X with the contract address in the caption, title or
+        description, then submit the public link. VYRAL verifies the post text, publication time and ownership with platform data and tracks views,
+        likes and comments automatically.
       </p>
+      <div className="mt-5 max-w-[620px] rounded-lg border border-edge bg-raised px-4 py-3.5">
+        <p className="text-[12.5px] text-ink-3">Required in your post: the contract address of ${c.symbol}</p>
+        <div className="mt-1.5 flex items-start gap-2">
+          <code className="min-w-0 break-all font-mono text-[13px] leading-relaxed text-ink">{c.mint}</code>
+          <CopyButton value={c.mint} label="Copy contract address" className="mt-px shrink-0" />
+        </div>
+      </div>
 
       <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_320px]">
         <SubmitVideoForm mint={c.mint} symbol={c.symbol} open={c.status === "active"} />
@@ -69,7 +78,8 @@ async function SubmitContent({ params }: Pick<PageProps<"/competitions/[mint]/su
               <KV label="Ownership">{eligibility.requireLinkedAccount ? "Linked account required" : "Not required"}</KV>
             </div>
             <ul className="border-t border-edge px-5 py-4 text-[12.5px] leading-relaxed text-ink-3">
-              <li>Videos published before the launch never qualify, even if edited or re-uploaded.</li>
+              <li>The post must contain the contract address. Removing it later sends the entry back to review.</li>
+              <li className="mt-2">Videos published before the launch never qualify, even if edited or re-uploaded.</li>
               <li className="mt-2">Each video can be entered once, in one competition.</li>
               <li className="mt-2">Suspicious engagement pauses rewards until a reviewer clears it.</li>
             </ul>

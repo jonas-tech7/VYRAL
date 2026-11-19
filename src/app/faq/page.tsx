@@ -31,10 +31,14 @@ export default function FaqPage() {
         </div>
         <p className="mt-10 text-[14px] text-ink-3">
           Looking for the details?{" "}
+          <Link href="/how-it-works" className="text-ink underline decoration-edge-strong underline-offset-[3px] hover:decoration-accent">
+            How it works
+          </Link>{" "}
+          explains every rule, and the{" "}
           <Link href="/docs" className="text-ink underline decoration-edge-strong underline-offset-[3px] hover:decoration-accent">
-            Read the documentation
-          </Link>
-          .
+            documentation
+          </Link>{" "}
+          goes into technical detail.
         </p>
       </div>
     </Container>

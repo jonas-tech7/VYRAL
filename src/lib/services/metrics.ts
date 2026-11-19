@@ -89,6 +89,8 @@ export async function syncMetrics(now = new Date()) {
           shares: r.shares,
           metricsUpdatedAt: r.capturedAt,
           metricsSource: r.source,
+          // Keep the latest post text, so removing the contract address after submission is caught.
+          ...(typeof r.postText === "string" ? { postText: r.postText } : {}),
         })
         .where(eq(schema.videos.id, v.id));
       await rescoreVideo(tx, { id: v.id, platform: v.platform as Platform, views: r.views, likes: r.likes, comments: r.comments });

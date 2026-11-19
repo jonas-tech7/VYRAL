@@ -29,6 +29,7 @@ describe("Viral Score", () => {
 
   it("applies platform-specific engagement multipliers", () => {
     const cfg: ScoringConfig = structuredClone(scoring);
+    for (const p of ["tiktok", "youtube", "instagram", "x"] as const) cfg.multipliers[p] = { view: 1, like: 1, comment: 1, source: { kind: "default" } };
     cfg.multipliers.tiktok = { ...cfg.multipliers.tiktok, like: 0.5 };
     const metrics = { views: 100_000, likes: 10_000, comments: 300 };
     const tiktok = computeViralScore(metrics, "tiktok", cfg, 2);
@@ -37,6 +38,32 @@ describe("Viral Score", () => {
     expect(youtube.adjusted.likes).toBe(10_000);
     expect(tiktok.score).toBeLessThan(youtube.score);
     expect(tiktok.components.views).toBe(youtube.components.views);
+  });
+
+  it("derives the default multipliers from the cited benchmarks (benchmark-sqrt-v1)", () => {
+    const m = scoring.multipliers;
+    expect(m.tiktok).toMatchObject({ view: 1, like: 1, comment: 1 });
+    expect(m.x).toMatchObject({ view: 1, like: 1, comment: 1 });
+    // Metricool 2026 averages per video, square-root dampened.
+    expect(m.youtube.view).toBeCloseTo(Math.sqrt(32_895 / 5_321), 2);
+    expect(m.youtube.like).toBeCloseTo(Math.sqrt(1_097 / 88), 2);
+    expect(m.instagram.view).toBeCloseTo(Math.sqrt(32_895 / 23_074), 2);
+    expect(m.instagram.like).toBeCloseTo(Math.sqrt(1_097 / 765), 2);
+    // Socialinsider 2026 comments per video.
+    expect(m.youtube.comment).toBeCloseTo(Math.sqrt(50 / 10), 2);
+    expect(scoringConfigSchema.safeParse(scoring).success).toBe(true);
+  });
+
+  it("narrows the gap between typical videos on different platforms", () => {
+    const neutral: ScoringConfig = structuredClone(scoring);
+    for (const p of ["tiktok", "youtube", "instagram", "x"] as const) neutral.multipliers[p] = { view: 1, like: 1, comment: 1, source: { kind: "default" } };
+    const typicalTikTok = { views: 32_895, likes: 1_097, comments: 50 };
+    const typicalShort = { views: 5_321, likes: 88, comments: 10 };
+    const tt = computeViralScore(typicalTikTok, "tiktok", scoring, 1).score;
+    const before = computeViralScore(typicalShort, "youtube", neutral, 1).score;
+    const after = computeViralScore(typicalShort, "youtube", scoring, 1).score;
+    expect(after).toBeGreaterThan(before);
+    expect(after).toBeLessThan(tt); // dampened: a typical Short still ranks below a typical TikTok
   });
 
   it("caps engagement relative to views so bought likes cannot outrank reach", () => {
@@ -349,6 +376,18 @@ describe("Fraud detection", () => {
     const f = a.findings.find((x) => x.signal === "reused_content");
     expect(f?.severity).toBe("high");
     expect(a.needsReview).toBe(true);
+  });
+
+  it("sends an entry back to review when the contract address is removed from the post", () => {
+    const flat = series(organic, 36);
+    const removed = assessFraud(input(flat, { mentionsContractAddress: false }), cfg);
+    const f = removed.findings.find((x) => x.signal === "contract_address_removed");
+    expect(f?.severity).toBe("medium");
+    expect(removed.needsReview).toBe(true);
+    for (const known of [true, null, undefined]) {
+      const signals = assessFraud(input(flat, { mentionsContractAddress: known }), cfg).findings.map((x) => x.signal);
+      expect(signals).not.toContain("contract_address_removed");
+    }
   });
 
   it("computes hamming distance on hex hashes", () => {

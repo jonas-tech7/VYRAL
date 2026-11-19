@@ -13,8 +13,9 @@
  * Requires platform app credentials and, for TikTok/Instagram, approved
  * scopes. Must be validated against each platform's sandbox before launch.
  */
-import { env } from "@/lib/env";
+import { joinPostText } from "@/lib/domain/mentions";
 import type { Platform } from "@/lib/domain/platforms";
+import { env } from "@/lib/env";
 import { dHashFromUrl } from "./fingerprint";
 import type { LinkedAccountCredentials, MetricsRequest, MetricsResult, ResolvedVideo, SocialProvider } from "./types";
 import { ProviderError } from "./types";
@@ -55,7 +56,14 @@ function requireCredentials(c: LinkedAccountCredentials | null, platform: Platfo
 
 type YtItem = {
   id: string;
-  snippet?: { publishedAt?: string; channelId?: string; channelTitle?: string; title?: string; thumbnails?: Record<string, { url?: string }> };
+  snippet?: {
+    publishedAt?: string;
+    channelId?: string;
+    channelTitle?: string;
+    title?: string;
+    description?: string;
+    thumbnails?: Record<string, { url?: string }>;
+  };
   statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
   contentDetails?: { duration?: string };
 };
@@ -146,6 +154,8 @@ type XTweet = {
   created_at?: string;
   author_id?: string;
   text?: string;
+  /** Full text of long posts (text is truncated for them). */
+  note_tweet?: { text?: string };
   public_metrics?: { like_count?: number; reply_count?: number; retweet_count?: number; quote_count?: number; impression_count?: number };
   attachments?: { media_keys?: string[] };
 };
@@ -159,7 +169,7 @@ async function xTweets(ids: string[]): Promise<{ tweets: XTweet[]; media: XMedia
   for (let i = 0; i < ids.length; i += 100) {
     const qs = new URLSearchParams({
       ids: ids.slice(i, i + 100).join(","),
-      "tweet.fields": "created_at,public_metrics,author_id,attachments",
+      "tweet.fields": "created_at,public_metrics,author_id,attachments,text,note_tweet",
       expansions: "attachments.media_keys,author_id",
       "media.fields": "type,public_metrics,duration_ms,preview_image_url",
       "user.fields": "username",
@@ -224,6 +234,7 @@ export class LiveSocialProvider implements SocialProvider {
           authorAccountId: item.snippet.channelId,
           authorHandle: item.snippet.channelTitle ?? item.snippet.channelId,
           title: item.snippet.title ?? null,
+          postText: joinPostText(item.snippet.title, item.snippet.description),
           thumbnailUrl: thumb,
           publishedAt: new Date(item.snippet.publishedAt),
           publishedAtSource: "platform_api",
@@ -252,6 +263,7 @@ export class LiveSocialProvider implements SocialProvider {
           authorAccountId: c.platformAccountId,
           authorHandle: c.handle,
           title: v.title ?? v.video_description ?? null,
+          postText: joinPostText(v.title, v.video_description),
           thumbnailUrl: v.cover_image_url ?? null,
           publishedAt: new Date(v.create_time * 1000),
           publishedAtSource: "platform_api",
@@ -279,6 +291,7 @@ export class LiveSocialProvider implements SocialProvider {
           authorAccountId: c.platformAccountId,
           authorHandle: c.handle,
           title: media.caption?.slice(0, 200) ?? null,
+          postText: joinPostText(media.caption),
           thumbnailUrl: media.thumbnail_url ?? null,
           publishedAt: new Date(media.timestamp),
           publishedAtSource: "platform_api",
@@ -307,6 +320,7 @@ export class LiveSocialProvider implements SocialProvider {
           authorAccountId: t.author_id,
           authorHandle: users.find((u) => u.id === t.author_id)?.username ?? t.author_id,
           title: null,
+          postText: joinPostText(t.note_tweet?.text ?? t.text),
           thumbnailUrl: m.video.preview_image_url ?? null,
           publishedAt: new Date(t.created_at),
           publishedAtSource: "platform_api",
@@ -342,6 +356,7 @@ export class LiveSocialProvider implements SocialProvider {
                   shares: 0,
                   capturedAt: now,
                   source: "youtube_data_api_v3",
+                  postText: joinPostText(it.snippet?.title, it.snippet?.description),
                 }
               : new ProviderError("Video unavailable", "not_found"),
           );
@@ -362,7 +377,15 @@ export class LiveSocialProvider implements SocialProvider {
             continue;
           }
           const m = xVideoMetrics(t, media);
-          out.set(r.key, { views: m.views, likes: m.likes, comments: m.comments, shares: m.shares, capturedAt: now, source: "x_api_v2" });
+          out.set(r.key, {
+            views: m.views,
+            likes: m.likes,
+            comments: m.comments,
+            shares: m.shares,
+            capturedAt: now,
+            source: "x_api_v2",
+            postText: joinPostText(t.note_tweet?.text ?? t.text),
+          });
         }
       } catch (e) {
         fail(xs.map((r) => r.key), e);
@@ -398,6 +421,7 @@ export class LiveSocialProvider implements SocialProvider {
                     shares: num(v.share_count),
                     capturedAt: now,
                     source: "tiktok_display_api",
+                    postText: joinPostText(v.title, v.video_description),
                   }
                 : new ProviderError("Video unavailable or no longer owned by the linked account", "not_found"),
             );
@@ -429,6 +453,8 @@ export class LiveSocialProvider implements SocialProvider {
           shares: 0,
           capturedAt: now,
           source: "instagram_graph_api",
+          // The shortcode lookup already returned the caption.
+          postText: joinPostText(found.caption),
         });
       } catch (e) {
         fail([r.key], e);

@@ -145,12 +145,20 @@ try {
   const comps = await page.evaluate(() => fetch("/api/competitions?sort=trending").then((r) => r.json()));
   const target = comps.items.find((c) => c.status === "active");
   const publishedAt = new Date(Date.now() - 45 * 60_000);
-  const videoId = ((BigInt(Math.floor(publishedAt.getTime() / 1000)) << 32n) | BigInt(Math.floor(Math.random() * 2 ** 31))).toString();
+  // TikTok IDs embed their creation time in the high bits. In demo mode, IDs ending in "000" simulate a
+  // caption without the contract address, so the happy path avoids them.
+  const tiktokId = (at, mentionsCa = true) => {
+    let id = (BigInt(Math.floor(at.getTime() / 1000)) << 32n) | BigInt(Math.floor(Math.random() * 2 ** 31));
+    id = mentionsCa ? (id % 1000n === 0n ? id + 1n : id) : id - (id % 1000n);
+    return id.toString();
+  };
+  const videoId = tiktokId(publishedAt);
   const handle = "e2ecreator";
   await page.goto(`${BASE}/competitions/${target.mint}/submit`, { waitUntil: "networkidle" });
   await page.getByLabel("Public video URL").fill(`https://www.tiktok.com/@${handle}/video/${videoId}`);
   await page.getByRole("button", { name: "Check video" }).click();
   await page.getByText("Published after the token launch").waitFor({ timeout: 15_000 });
+  await page.getByText("Post contains the coin's contract address").waitFor({ timeout: 15_000 });
   const linkBtn = page.getByRole("button", { name: `Link @${handle}` });
   if (await linkBtn.isVisible().catch(() => false)) {
     await linkBtn.click();
@@ -181,6 +189,14 @@ try {
   check("pre-launch video refused", pre?.error?.code === "published_before_launch", pre?.error?.code);
   const again = await submitOld();
   check("pre-launch video blocked on resubmission", again?.error?.code === "check_failed_not_previously_submitted", again?.error?.code);
+
+  // A post without the contract address is refused (and not recorded, so the creator can fix the caption).
+  const noCa = await page.evaluate(
+    ([mint, url]) =>
+      fetch(`/api/competitions/${mint}/submissions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) }).then((r) => r.json()),
+    [target.mint, `https://www.tiktok.com/@${handle}/video/${tiktokId(new Date(Date.now() - 30 * 60_000), false)}`],
+  );
+  check("post without the contract address refused", noCa?.error?.code === "check_failed_mentions_contract_address", noCa?.error?.code);
 
   // 3. Launch a token
   const png = await sharp({ create: { width: 256, height: 256, channels: 3, background: { r: 44, g: 245, b: 158 } } }).png().toBuffer();

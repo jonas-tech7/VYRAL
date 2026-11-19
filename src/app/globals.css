@@ -307,3 +307,36 @@
     stroke-dashoffset: 0;
   }
 }
+
+/* Home: attention loop (components/home/flywheel.tsx) */
+.flywheel-orbit {
+  transform-box: view-box;
+  transform-origin: 220px 220px;
+  animation: flywheel-orbit 12s linear infinite;
+}
+.flywheel-station {
+  fill: var(--color-ink-4);
+  animation: flywheel-station 12s linear infinite;
+  animation-delay: calc(var(--i) * 3s);
+}
+@keyframes flywheel-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes flywheel-station {
+  0%,
+  9% {
+    fill: var(--color-accent);
+  }
+  18%,
+  100% {
+    fill: var(--color-ink-4);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flywheel-orbit,
+  .flywheel-station {
+    animation: none;
+  }
+}

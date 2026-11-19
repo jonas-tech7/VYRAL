@@ -9,7 +9,7 @@ import { rewardCurveSchema, type RewardCurveConfig, type ScoringConfig } from "@
 import { db, schema } from "@/lib/db";
 import { PLATFORMS } from "@/lib/domain/platforms";
 import { nextCheckpointAfter } from "@/lib/rewards/allocation";
-import { calibrateMultipliers, DEFAULT_CALIBRATION_OPTIONS } from "@/lib/scoring/calibration";
+import { calibrateMultipliers, composeWithView, DEFAULT_CALIBRATION_OPTIONS } from "@/lib/scoring/calibration";
 import { audit } from "./audit";
 import { rescoreAllActive } from "./scoring";
 
@@ -215,7 +215,11 @@ export async function computeCalibration(windowDays = DEFAULT_CALIBRATION_OPTION
   return calibrateMultipliers(rows, { ...DEFAULT_CALIBRATION_OPTIONS, windowDays });
 }
 
-/** Applies calibrated like/comment multipliers (view multipliers unchanged) and rescores. */
+/**
+ * Applies calibrated like/comment multipliers and rescores. View multipliers
+ * are unchanged; the calibrated rate multipliers are combined with them
+ * (composeWithView) because likes and comments are scored on absolute counts.
+ */
 export async function applyCalibration(actor: Actor, note: string) {
   const result = await computeCalibration();
   if (!result.usable) throw new ApiError(422, "insufficient_data", "Not enough verified data across platforms to calibrate.");
@@ -226,8 +230,8 @@ export async function applyCalibration(actor: Actor, note: string) {
     if (!c.sufficient || c.like.suggested === null) continue;
     next.multipliers[p] = {
       view: current.multipliers[p].view,
-      like: c.like.suggested,
-      comment: c.comment.suggested ?? current.multipliers[p].comment,
+      like: composeWithView(current.multipliers[p].view, c.like.suggested),
+      comment: c.comment.suggested === null ? current.multipliers[p].comment : composeWithView(current.multipliers[p].view, c.comment.suggested),
       source: {
         kind: "calibrated",
         note: `${result.method}; reference like rate ${(result.reference.likeRate! * 100).toFixed(2)}%`,

@@ -14,6 +14,7 @@ import { and, eq, ne, sql } from "drizzle-orm";
 import { ApiError } from "@/lib/api/errors";
 import { getConfig } from "@/lib/config/store";
 import { db, schema } from "@/lib/db";
+import { mentionsContractAddress } from "@/lib/domain/mentions";
 import { PLATFORM_LABEL, type Platform } from "@/lib/domain/platforms";
 import { socialProvider } from "@/lib/providers/social";
 import { ProviderError, type ResolvedVideo } from "@/lib/providers/social/types";
@@ -28,6 +29,7 @@ export type CheckId =
   | "not_previously_submitted"
   | "short_form"
   | "published_after_launch"
+  | "mentions_contract_address"
   | "account_ownership"
   | "submission_limit"
   | "creator_standing";
@@ -98,7 +100,10 @@ async function evaluate(wallet: string, mint: string, url: string) {
     .where(and(eq(schema.videos.platform, parsed.platform), eq(schema.videos.platformVideoId, parsed.videoId)));
 
   const credentials = await linkedCredentials(wallet, parsed.platform);
-  const resolved = await socialProvider().resolve(parsed, credentials).catch(providerErrorToApi);
+  const resolved = await socialProvider()
+    .resolve(parsed, credentials, { contractAddress: token.mint, symbol: token.symbol })
+    .catch(providerErrorToApi);
+  const mentionsCa = mentionsContractAddress(resolved.postText, token.mint);
 
   const linked = (await listLinkedAccounts(wallet)).find((a) => a.platform === parsed.platform) ?? null;
   const owns = Boolean(linked && linked.platformAccountId === resolved.authorAccountId);
@@ -135,6 +140,16 @@ async function evaluate(wallet: string, mint: string, url: string) {
       ok: resolved.publishedAt.getTime() > token.launchedAt.getTime(),
       label: "Published after the token launch",
       detail: `Published ${fmt(resolved.publishedAt)} · launched ${fmt(token.launchedAt)}`,
+    },
+    {
+      id: "mentions_contract_address",
+      ok: mentionsCa,
+      label: "Post contains the coin's contract address",
+      detail: mentionsCa
+        ? "Found in the caption, title or description."
+        : resolved.postText === null
+          ? "The platform did not return the post's text. Try again in a few minutes."
+          : `Add ${token.mint} to the caption, title or description, then submit again.`,
     },
     {
       id: "account_ownership",
@@ -212,6 +227,7 @@ export async function createSubmission(wallet: string, mint: string, url: string
     authorHandle: r.resolved.authorHandle,
     socialAccountId: r.owns ? r.linked!.id : null,
     title: r.resolved.title,
+    postText: r.resolved.postText,
     thumbnailUrl: r.resolved.thumbnailUrl,
     contentFingerprint: r.resolved.contentFingerprint,
     publishedAt: r.resolved.publishedAt,

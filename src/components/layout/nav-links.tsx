@@ -7,6 +7,7 @@ import { useLayoutEffect, useState } from "react";
 import { cn } from "@/lib/format";
 
 export const NAV = [
+  { href: "/how-it-works", label: "How it works" },
   { href: "/launch", label: "Launch" },
   { href: "/explore", label: "Explore" },
   { href: "/competitions", label: "Competitions" },

@@ -25,7 +25,8 @@ export type FraudSignal =
   | "submission_velocity"
   | "shared_social_account"
   | "shared_network"
-  | "self_dealing";
+  | "self_dealing"
+  | "contract_address_removed";
 
 export type Severity = "low" | "medium" | "high";
 
@@ -60,6 +61,8 @@ export type FraudInput = {
     socialAccountWalletCount: number;
     networkWalletCount: number;
     isTokenDeployer: boolean;
+    /** Whether the post's latest text still contains the contract address (null: not known). */
+    mentionsContractAddress?: boolean | null;
   };
 };
 
@@ -79,6 +82,7 @@ export const SIGNAL_LABEL: Record<FraudSignal, string> = {
   shared_social_account: "Social account shared across wallets",
   shared_network: "Multiple wallets from one network",
   self_dealing: "Creator is the token deployer",
+  contract_address_removed: "Contract address removed from the post",
 };
 
 const SEVERITY_RANK: Record<Severity, number> = { low: 1, medium: 2, high: 3 };
@@ -410,6 +414,15 @@ function identityDetectors(input: FraudInput, cfg: FraudConfig): FraudFinding[] 
       severity: r.networkWalletCount >= 2 * cfg.sharedNetwork.minWallets ? "medium" : "low",
       summary: `${r.networkWalletCount} wallets submitted to this competition from the same network.`,
       evidence: { wallets: r.networkWalletCount },
+    });
+  }
+
+  if (r.mentionsContractAddress === false) {
+    out.push({
+      signal: "contract_address_removed",
+      severity: "medium",
+      summary: "The post no longer contains the coin's contract address, which was required when it was submitted.",
+      evidence: {},
     });
   }
 

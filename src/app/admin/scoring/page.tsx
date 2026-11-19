@@ -11,6 +11,7 @@ import { isDemoMode } from "@/lib/env";
 import { PLATFORM_LABEL, PLATFORMS } from "@/lib/domain/platforms";
 import { dateTimeUtc, shortAddress } from "@/lib/format";
 import { listConfigHistory } from "@/lib/queries/admin";
+import { composeWithView } from "@/lib/scoring/calibration";
 import { computeCalibration } from "@/lib/services/admin";
 
 export default function AdminScoringPage() {
@@ -94,14 +95,23 @@ async function Scoring() {
                       {pct(c.like.medianRate)}
                     </TD>
                     <TD align="right" numeric className="text-ink">
-                      {c.like.suggested?.toFixed(3) ?? "—"}
-                      {c.like.raw !== null ? <span className="block text-[11.5px] text-ink-4">raw {c.like.raw.toFixed(3)}</span> : null}
+                      {c.like.suggested !== null ? composeWithView(cur.view, c.like.suggested).toFixed(3) : "—"}
+                      {c.like.suggested !== null ? (
+                        <span className="block text-[11.5px] text-ink-4">
+                          rate {c.like.suggested.toFixed(3)} × view {cur.view.toFixed(2)}
+                        </span>
+                      ) : null}
                     </TD>
                     <TD align="right" numeric className="text-ink-2">
                       {pct(c.comment.medianRate)}
                     </TD>
                     <TD align="right" numeric className="text-ink">
-                      {c.comment.suggested?.toFixed(3) ?? "—"}
+                      {c.comment.suggested !== null ? composeWithView(cur.view, c.comment.suggested).toFixed(3) : "—"}
+                      {c.comment.suggested !== null ? (
+                        <span className="block text-[11.5px] text-ink-4">
+                          rate {c.comment.suggested.toFixed(3)} × view {cur.view.toFixed(2)}
+                        </span>
+                      ) : null}
                     </TD>
                     <TD align="right" numeric className="text-ink-3">
                       {cur.like.toFixed(3)} / {cur.comment.toFixed(3)}
