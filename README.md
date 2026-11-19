@@ -39,7 +39,7 @@ Open http://localhost:3000 and connect Phantom, Solflare or any Wallet Standard 
 | --- | --- |
 | `npm run dev` / `npm run worker` | Web app / background worker (run both, or `npm run dev:all`) |
 | `npm run build` / `npm start` | Production build / server |
-| `npm run vercel-build` | Hosted build: migrate → seed demo data if the database is empty (`SEED_DEMO_DATA`) → `next build` |
+| `npm run vercel-build` | Hosted build: migrate → seed demo data if the database is empty (`SEED_DEMO_DATA`) → grant `ADMIN_WALLETS` → `next build` |
 | `npm run db:migrate` | Apply SQL migrations (`drizzle/`) |
 | `npm run db:seed` / `npm run db:reset` | Seed demo data / drop, migrate and seed (development only) |
 | `npm run admin:add -- <wallet> [admin\|reviewer]` | Grant an administrative role (audit-logged) |
@@ -115,7 +115,7 @@ On serverless hosts without a long-running process, `GET /api/cron/tick` runs wh
    | `STORAGE_PROVIDER` | `database` (Vercel has no persistent disk) |
    | `TRUST_PROXY` | `true` |
    | `APP_URL` | `https://<your-project>.vercel.app` (or your domain) |
-   | `ADMIN_WALLETS` | your wallet address (optional, grants the admin role when seeding) |
+   | `ADMIN_WALLETS` | your Solana wallet address (optional, comma-separated; granted the admin role on every deploy) |
 
 4. Deploy, then have an external scheduler (e.g. cron-job.org) call `https://<your-domain>/api/cron/tick?key=<CRON_SECRET>` every minute.
 

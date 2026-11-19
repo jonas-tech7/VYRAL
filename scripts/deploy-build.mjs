@@ -3,7 +3,8 @@
  *   1. apply database migrations
  *   2. seed the clearly-labelled demo data, only if the database is empty
  *      and SEED_DEMO_DATA is not "false"
- *   3. next build
+ *   3. grant the admin role to the wallets in ADMIN_WALLETS
+ *   4. next build
  */
 import { spawnSync } from "node:child_process";
 
@@ -20,4 +21,5 @@ if (!process.env.DATABASE_URL) {
 
 run("npx", ["tsx", "scripts/migrate.ts"]);
 if (process.env.SEED_DEMO_DATA !== "false") run("npx", ["tsx", "scripts/seed.ts", "--if-empty"]);
+run("npx", ["tsx", "scripts/admin-sync.ts"]);
 run("npx", ["next", "build"]);

@@ -27,6 +27,7 @@ async function main() {
   const { db, pool, schema } = await import("@/lib/db");
   const { ensureConfigDefaults, getAllConfig } = await import("@/lib/config/store");
   const { adminWalletsFromEnv } = await import("@/lib/env");
+  const { isValidAddress } = await import("@/lib/solana/keys");
   const { computeViralScore } = await import("@/lib/scoring/viral-score");
   const { assessFraud } = await import("@/lib/fraud/detectors");
   const { allocateFees, selectWinner, eligibilityOf, rankEntries } = await import("@/lib/rewards/allocation");
@@ -69,7 +70,8 @@ async function main() {
   const cfg = await getAllConfig();
   const scoring = cfg.scoring.value;
 
-  for (const w of adminWalletsFromEnv()) {
+  const adminWallets = adminWalletsFromEnv().filter((w) => isValidAddress(w));
+  for (const w of adminWallets) {
     await db.insert(schema.users).values({ wallet: w }).onConflictDoNothing();
     await db.insert(schema.admins).values({ wallet: w, role: "admin", addedBy: "seed:ADMIN_WALLETS" }).onConflictDoNothing();
   }
@@ -484,7 +486,7 @@ async function main() {
   }
 
   // A reviewer already rejected a few of the flagged videos.
-  const reviewer = adminWalletsFromEnv()[0] ?? "system:seed-reviewer";
+  const reviewer = adminWallets[0] ?? "system:seed-reviewer";
   const toReject = videos.filter((v) => v.status === "under_review" && simParams(v.platform, v.videoId).pattern !== "organic").slice(0, 3);
   for (const v of toReject) {
     const reviewedAt = new Date(nowMs - randInt(2, 30) * HOUR);
