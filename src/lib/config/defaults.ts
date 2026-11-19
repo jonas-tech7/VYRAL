@@ -7,9 +7,10 @@
  *    of 500 verified views is the product owner's decision.
  *  - Platform multipliers follow method "benchmark-sqrt-v1" (below): derived
  *    from published short-form studies, square-root dampened, neutral where
- *    sources disagree or no comparable data exists. Each value carries its
- *    citation, and calibration from VYRAL's own verified data replaces them
- *    once enough data exists (see lib/scoring/calibration.ts).
+ *    sources disagree. X has no comparable published data and uses the
+ *    Instagram values as a labelled estimate (product decision). Each value
+ *    carries its citation, and calibration from VYRAL's own verified data
+ *    replaces them once enough data exists (see lib/scoring/calibration.ts).
  *  - Fraud thresholds are conservative review triggers; they only route a
  *    video to human review and never reject on their own.
  */
@@ -59,15 +60,20 @@ export const BENCHMARK_MULTIPLIERS: Record<Platform, PlatformMultiplier> = {
     },
   },
   x: {
-    view: 1,
-    like: 1,
+    view: 1.19,
+    like: 1.2,
     comment: 1,
     source: {
-      kind: "default",
-      note: `${MULTIPLIER_METHOD}: neutral. No comparable published short-form benchmark (X counts post impressions as views).`,
+      kind: "manual",
+      note:
+        "Estimate (product decision): same values as Instagram Reels until VYRAL has its own data. No comparable published short-form " +
+        "benchmark exists for X (X counts post impressions as views).",
     },
   },
 };
+
+/** True for multiplier values that are an estimate rather than measured or published data. */
+export const isEstimate = (note: string | undefined) => Boolean(note?.startsWith("Estimate"));
 
 const defaultRatioBounds = { maxLikesPerView: 0.35, maxCommentsPerView: 0.05, minLikesPerView: 0.002 };
 

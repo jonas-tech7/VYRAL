@@ -6,6 +6,7 @@ import { ScoreCalculator } from "@/components/home/score-calculator";
 import { ScoreFormula } from "@/components/home/score-formula";
 import { ButtonLink } from "@/components/ui/button";
 import { Container, Skeleton } from "@/components/ui/misc";
+import { isEstimate } from "@/lib/config/defaults";
 import { getAllConfig } from "@/lib/config/store";
 import { PLATFORM_LABEL, PLATFORMS } from "@/lib/domain/platforms";
 import { bpsToPct, cn, fullNumber, usd } from "@/lib/format";
@@ -218,9 +219,11 @@ async function Content() {
                     ? `VYRAL data (n=${fullNumber(m.source.sampleSize ?? 0)})`
                     : p === "tiktok"
                       ? "Baseline"
-                      : m.view === 1 && m.like === 1 && m.comment === 1
-                        ? "No comparable data yet"
-                        : "Published benchmarks";
+                      : isEstimate(m.source.note)
+                        ? "Estimate until data exists"
+                        : m.view === 1 && m.like === 1 && m.comment === 1
+                          ? "No comparable data yet"
+                          : "Published benchmarks";
                 return (
                   <tr key={p} className="border-b border-edge last:border-b-0">
                     <td className="px-4 py-3 text-ink">{PLATFORM_LABEL[p]}</td>
@@ -246,7 +249,8 @@ async function Content() {
             mix very different account sizes.
           </li>
           <li>
-            <span className="text-ink">Neutral where unclear:</span> where sources disagree or no comparable data exists (X), the value stays ×1.00.
+            <span className="text-ink">Careful where data is thin:</span> where sources disagree (Instagram comments), the value stays ×1.00. X has no
+            comparable published data, so it uses the Instagram values as an estimate until VYRAL&apos;s own data replaces them.
           </li>
           <li>
             <span className="text-ink">Getting better over time:</span> once enough verified videos exist, the multipliers are recalibrated from

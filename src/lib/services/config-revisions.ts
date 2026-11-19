@@ -44,6 +44,17 @@ const BENCHMARK_MULTIPLIERS: Revision<"scoring"> = {
   note: "Default revision: research-based platform multipliers (benchmark-sqrt-v1) replace the neutral starting values.",
 };
 
+const X_ESTIMATE: Revision<"scoring"> = {
+  id: "2026-11-x-estimate",
+  key: "scoring",
+  appliesTo: (c) => {
+    const m = c.multipliers.x;
+    return m.source.kind === "default" && m.view === 1 && m.like === 1 && m.comment === 1;
+  },
+  next: (c) => ({ ...c, multipliers: { ...c.multipliers, x: structuredClone(DEFAULT_CONFIG.scoring.multipliers.x) } }),
+  note: "Default revision: X uses the Instagram Reels values as an estimate until VYRAL has its own data.",
+};
+
 async function run<K extends ConfigKey>(rev: Revision<K>): Promise<boolean> {
   const current = await getConfig(rev.key);
   if (!rev.appliesTo(current.value)) return false;
@@ -55,9 +66,15 @@ async function run<K extends ConfigKey>(rev: Revision<K>): Promise<boolean> {
 export async function applyDefaultRevisions(): Promise<string[]> {
   const applied: string[] = [];
   if (await run(PAYOUT_MINIMUM_500)) applied.push(PAYOUT_MINIMUM_500.id);
+  let rescore = false;
   if (await run(BENCHMARK_MULTIPLIERS)) {
     applied.push(BENCHMARK_MULTIPLIERS.id);
-    await rescoreAllActive();
+    rescore = true;
   }
+  if (await run(X_ESTIMATE)) {
+    applied.push(X_ESTIMATE.id);
+    rescore = true;
+  }
+  if (rescore) await rescoreAllActive();
   return applied;
 }

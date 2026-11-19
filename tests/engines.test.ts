@@ -43,7 +43,9 @@ describe("Viral Score", () => {
   it("derives the default multipliers from the cited benchmarks (benchmark-sqrt-v1)", () => {
     const m = scoring.multipliers;
     expect(m.tiktok).toMatchObject({ view: 1, like: 1, comment: 1 });
-    expect(m.x).toMatchObject({ view: 1, like: 1, comment: 1 });
+    // X: labelled estimate (Instagram values), no comparable published benchmark.
+    expect(m.x).toMatchObject({ view: m.instagram.view, like: m.instagram.like, comment: m.instagram.comment });
+    expect(m.x.source.note).toMatch(/^Estimate/);
     // Metricool 2026 averages per video, square-root dampened.
     expect(m.youtube.view).toBeCloseTo(Math.sqrt(32_895 / 5_321), 2);
     expect(m.youtube.like).toBeCloseTo(Math.sqrt(1_097 / 88), 2);
@@ -67,11 +69,12 @@ describe("Viral Score", () => {
   });
 
   it("caps engagement relative to views so bought likes cannot outrank reach", () => {
-    const bought = computeViralScore({ views: 6_000, likes: 50_000, comments: 9_000 }, "x", scoring, 1);
+    // TikTok is the baseline platform (all multipliers 1.00), so the cap is 35% of the raw views.
+    const bought = computeViralScore({ views: 6_000, likes: 50_000, comments: 9_000 }, "tiktok", scoring, 1);
     expect(bought.capped.likes).toBe(true);
     expect(bought.capped.comments).toBe(true);
     expect(bought.adjusted.likes).toBeCloseTo(6_000 * 0.35, 5);
-    const organic = computeViralScore({ views: 400_000, likes: 20_000, comments: 400 }, "x", scoring, 1);
+    const organic = computeViralScore({ views: 400_000, likes: 20_000, comments: 400 }, "tiktok", scoring, 1);
     expect(organic.score).toBeGreaterThan(bought.score);
   });
 

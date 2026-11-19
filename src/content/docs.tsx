@@ -239,7 +239,9 @@ const viralScore: DocPage = {
           reports TikTok ahead, so the Reels comment multiplier is 1.00.
         </li>
         <li>
-          <strong>X stays neutral (1.00)</strong>: no comparable published short-form benchmark exists, and X counts every post impression as a view.
+          <strong>X is an estimate</strong>: no comparable published short-form benchmark exists (X counts every post impression as a view), so X uses
+          the Instagram Reels values (views ×1.19, likes ×1.20) as a product decision until VYRAL&apos;s own data replaces them. It is labelled as an
+          estimate in the table above.
         </li>
         <li>
           These are published study averages applied with a documented method, not official platform figures, and they are a starting point.

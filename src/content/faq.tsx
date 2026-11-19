@@ -75,7 +75,8 @@ export const FAQ: FaqItem[] = [
       <p>
         Because it is harder to get. In the largest published short-form study (Metricool 2026, 6.18 million videos), a TikTok video averages 1,097
         likes, a YouTube Short 88. VYRAL turns such differences into separate multipliers for views, likes and comments per platform, dampened with a
-        square root so no platform gets an outsized advantage. Where the data is unclear, the multiplier stays neutral, and once VYRAL has enough
+        square root so no platform gets an outsized advantage. For X there is no comparable published data yet, so it uses the Instagram values as an
+        estimate, and once VYRAL has enough
         verified videos of its own, the values are recalibrated from that data. <Link href="/how-it-works#multipliers">Platform multipliers</Link>
       </p>
     ),
