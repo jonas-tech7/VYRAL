@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { readLocalFile } from "@/lib/providers/storage";
+import { readStoredFile } from "@/lib/providers/storage";
 
 const TYPES: Record<string, string> = { webp: "image/webp", json: "application/json" };
 
@@ -9,7 +9,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext<"/api/files/[...k
   const ext = joined.split(".").pop() ?? "";
   const type = TYPES[ext];
   if (!type) return new NextResponse("Not found", { status: 404 });
-  const data = await readLocalFile(joined);
+  const data = await readStoredFile(joined);
   if (!data) return new NextResponse("Not found", { status: 404 });
   return new NextResponse(new Uint8Array(data), {
     headers: {

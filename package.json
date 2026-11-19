@@ -6,6 +6,7 @@
     "dev": "next dev",
     "dev:all": "node scripts/dev-all.mjs",
     "build": "next build",
+    "vercel-build": "node scripts/deploy-build.mjs",
     "start": "next start",
     "worker": "tsx src/worker/index.ts",
     "lint": "eslint",

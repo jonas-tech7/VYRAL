@@ -15,6 +15,13 @@
       "when": 1795104929520,
       "tag": "0001_integrity",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795114101281,
+      "tag": "0002_stored_files",
+      "breakpoints": true
     }
   ]
 }

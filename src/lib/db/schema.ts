@@ -15,6 +15,7 @@ import { sql } from "drizzle-orm";
 import {
   bigint,
   bigserial,
+  customType,
   boolean,
   doublePrecision,
   index,
@@ -554,6 +555,16 @@ export const launchRequests = pgTable("launch_requests", {
   createdAt: tz().notNull().defaultNow(),
   expiresAt: tz().notNull(),
   confirmedAt: tz(),
+});
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
+
+/** File contents for STORAGE_PROVIDER=database (serverless hosts without a persistent disk). */
+export const storedFiles = pgTable("stored_files", {
+  key: text().primaryKey(),
+  contentType: text().notNull(),
+  data: bytea().notNull(),
+  createdAt: tz().notNull().defaultNow(),
 });
 
 export const uploads = pgTable("uploads", {

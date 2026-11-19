@@ -39,6 +39,7 @@ Open http://localhost:3000 and connect Phantom, Solflare or any Wallet Standard 
 | --- | --- |
 | `npm run dev` / `npm run worker` | Web app / background worker (run both, or `npm run dev:all`) |
 | `npm run build` / `npm start` | Production build / server |
+| `npm run vercel-build` | Hosted build: migrate → seed demo data if the database is empty (`SEED_DEMO_DATA`) → `next build` |
 | `npm run db:migrate` | Apply SQL migrations (`drizzle/`) |
 | `npm run db:seed` / `npm run db:reset` | Seed demo data / drop, migrate and seed (development only) |
 | `npm run admin:add -- <wallet> [admin\|reviewer]` | Grant an administrative role (audit-logged) |
@@ -96,6 +97,27 @@ Every external dependency sits behind an interface with a development implementa
 | `maintenance` | 1 h | Prunes nonces, sessions, rate-limit windows, old samples |
 
 Each job takes a PostgreSQL advisory lock, so several worker replicas can run safely. `npm run worker -- --once` runs one pass (cron-style deployments).
+
+On serverless hosts without a long-running process, `GET /api/cron/tick` runs whichever jobs are due (same code, same locks). Protect it with `CRON_SECRET` and call it once a minute.
+
+## Deploying to Vercel (free tier)
+
+1. Create a PostgreSQL database (e.g. [Neon](https://neon.tech) free tier) and copy its connection string.
+2. Import the repository in Vercel (framework preset **Next.js**, root `./`). `vercel.json` sets the build command to `npm run vercel-build`.
+3. Environment variables:
+
+   | Variable | Value |
+   | --- | --- |
+   | `DATABASE_URL` | Postgres connection string (`?sslmode=require`) |
+   | `SESSION_SECRET` | random string, ≥ 32 characters |
+   | `TOKEN_ENCRYPTION_KEY` | `openssl rand -base64 32` |
+   | `CRON_SECRET` | random string |
+   | `STORAGE_PROVIDER` | `database` (Vercel has no persistent disk) |
+   | `TRUST_PROXY` | `true` |
+   | `APP_URL` | `https://<your-project>.vercel.app` (or your domain) |
+   | `ADMIN_WALLETS` | your wallet address (optional, grants the admin role when seeding) |
+
+4. Deploy, then have an external scheduler (e.g. cron-job.org) call `https://<your-domain>/api/cron/tick?key=<CRON_SECRET>` every minute.
 
 ## How the core mechanisms work
 

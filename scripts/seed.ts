@@ -11,7 +11,8 @@
  * Score, eligibility rules, reward curve, allocation) — only the inputs are
  * simulated.
  *
- *   npm run db:seed          (requires an empty database: run db:reset first)
+ *   npm run db:seed                 (requires an empty database: run db:reset first)
+ *   npm run db:seed -- --if-empty   (no-op when data exists; used by deploy builds)
  */
 import { loadEnvConfig } from "@next/env";
 
@@ -39,6 +40,11 @@ async function main() {
 
   const [{ n: existing }] = (await db.execute(sql`SELECT count(*)::int AS n FROM tokens`)).rows as Array<{ n: number }>;
   if (Number(existing) > 0) {
+    if (process.argv.includes("--if-empty")) {
+      console.log("Database already contains data; skipping demo seed.");
+      await pool.end();
+      return;
+    }
     console.error("Database already contains tokens. Run `npm run db:reset` to start from a clean database.");
     process.exit(1);
   }

@@ -35,7 +35,10 @@ const schema = z.object({
   PRICE_PROVIDER: z.enum(["mock", "jupiter"]).default("mock"),
   FEE_PROVIDER: z.enum(["mock", "onchain"]).default("mock"),
   PAYOUT_EXECUTOR: z.enum(["simulated", "solana"]).default("simulated"),
-  STORAGE_PROVIDER: z.enum(["local", "pinata"]).default("local"),
+  /** local: files on disk · database: stored in PostgreSQL (serverless hosts) · pinata: IPFS */
+  STORAGE_PROVIDER: z.enum(["local", "database", "pinata"]).default("local"),
+  /** Shared secret for /api/cron/tick (serverless hosts without a long-running worker). */
+  CRON_SECRET: optionalString,
 
   /** Public key of the fee vault that receives creator fees for competitions. */
   FEE_VAULT_ADDRESS: optionalString,
