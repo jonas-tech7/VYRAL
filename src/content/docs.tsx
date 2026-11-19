@@ -11,13 +11,21 @@ function Live({ children }: { children: ReactNode }) {
 const overview: DocPage = {
   slug: "",
   title: "Introduction",
-  description: "How VYRAL connects token launches with a performance-based creator economy.",
+  description: "How VYRAL turns a token's creator fees into rewards for the creators who make it go viral.",
   body: () => (
     <>
       <p>
-        VYRAL is a token launchpad on Solana where every launch opens its own video competition. Creators publish short videos about a token, submit
-        the links with their wallet, and compete on a transparent score. At regular checkpoints, the best-performing eligible video earns a share of
-        the creator fees that the token has generated.
+        <strong>Memes are attention.</strong> A coin lives on the people who talk about it: the videos, the reposts, the conversation. VYRAL exists to
+        make coins go viral &mdash; that is where the name comes from.
+      </p>
+      <p>
+        VYRAL is a token launchpad on Solana where every launch opens its own video competition. A share of the creator fees each token earns from
+        trading is used to pay the creators and influencers who promote it best. Every 3 or 6 hours, the top-ranked eligible video is paid, ranked by a
+        transparent score and settled as a Solana transaction anyone can verify.
+      </p>
+      <p>
+        The incentives point the same way. Creators are paid for the reach they actually generate, and the coin gains the attention it needs to be
+        discovered. More attention can bring more trading, and trading generates the fees that fund the next rewards.
       </p>
       <h2 id="loop">The loop</h2>
       <ol>

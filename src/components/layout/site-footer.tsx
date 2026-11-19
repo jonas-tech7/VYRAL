@@ -24,6 +24,7 @@ const COLUMNS = [
   {
     title: "Resources",
     links: [
+      { href: "/faq", label: "FAQ" },
       { href: "/docs", label: "Documentation" },
       { href: "/docs/security", label: "Security" },
       { href: "/docs/architecture", label: "Architecture" },
