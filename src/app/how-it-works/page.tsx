@@ -145,6 +145,10 @@ async function Content() {
             <span className="text-ink">Continuous:</span> there are no fixed rounds that end. The competition runs for as long as the coin is active.
           </li>
           <li>
+            <span className="text-ink">Linked from day one:</span> every coin&apos;s token data links to its page on VYRAL, so wherever the coin shows
+            up, people find its competition.
+          </li>
+          <li>
             <span className="text-ink">No self-dealing:</span> the wallet that deployed a coin cannot win its own competition.
           </li>
         </ul>

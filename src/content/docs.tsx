@@ -93,6 +93,14 @@ const launching: DocPage = {
         You land on the token&apos;s competition page. Videos published from that moment on are eligible. As deployer you keep the share of creator fees
         that is not allocated to rewards; by default your own videos cannot win your token&apos;s competition.
       </p>
+      <h2 id="linked">Linked to its VYRAL page</h2>
+      <p>
+        Every coin launched on VYRAL links to its own page on VYRAL (<code>/competitions/&lt;contract address&gt;</code>) from the moment it exists. The
+        link is written into the token metadata as its <code>external_url</code>, as <code>extensions.vyral</code> and as the last line of the
+        description, so wherever the coin appears, people can find its competition. Your own website stays in <code>extensions.website</code>. When a
+        launch service only assigns the address after the metadata is written, the link is a permanent <code>/l/&lt;launch id&gt;</code> address that
+        forwards to the coin&apos;s page.
+      </p>
     </>
   ),
 };

@@ -11,7 +11,7 @@ import { CompetitionStatus, Eligibility, VideoStatus } from "@/components/compet
 import { CHECKPOINT_OUTCOME, PayoutStatus, TxSignature } from "@/components/competition/tx";
 import { DemoTag } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
-import { Address, Countdown } from "@/components/ui/client";
+import { Address, CopyButton, Countdown } from "@/components/ui/client";
 import { Container, KV, Notice, Panel, SectionHeader, Skeleton } from "@/components/ui/misc";
 import { PlatformTag } from "@/components/ui/platform";
 import { Stat, StatGrid } from "@/components/ui/stat";
@@ -19,6 +19,8 @@ import { EmptyRow, Table, TD, TH, THead, TR } from "@/components/ui/table";
 import { TokenAvatar } from "@/components/ui/token-avatar";
 import { db, schema } from "@/lib/db";
 import { PLATFORM_LABEL, PLATFORM_SHORT, PLATFORMS } from "@/lib/domain/platforms";
+import { env } from "@/lib/env";
+import { coinPageUrl } from "@/lib/launch/metadata";
 import { age, bpsToPct, compactNumber, dateTimeUtc, fullNumber, price, score, shortAddress, sol, solToUsd, timeAgo, usd } from "@/lib/format";
 import { getCompetitionDetail } from "@/lib/queries/public";
 
@@ -117,7 +119,11 @@ async function Detail({ params, searchParams }: Pick<PageProps<"/competitions/[m
       {sp.launched === "1" ? (
         <Notice tone="positive" className="mt-6">
           <span className="font-medium">Your token is live.</span> Its competition is open now — share this page with creators. Videos published from
-          this moment on are eligible.
+          this moment on are eligible. The coin&apos;s metadata already links here, so people who find it elsewhere land on this page.
+          <span className="mt-2 flex items-start gap-1.5">
+            <code className="min-w-0 break-all font-mono text-[12.5px]">{coinPageUrl(d.mint, env.APP_URL)}</code>
+            <CopyButton value={coinPageUrl(d.mint, env.APP_URL)} label="Copy link" className="shrink-0" />
+          </span>
         </Notice>
       ) : null}
       {d.status === "paused" ? (

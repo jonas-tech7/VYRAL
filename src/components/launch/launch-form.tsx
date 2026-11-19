@@ -403,6 +403,13 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
               <dt className="text-ink-3">Payout eligibility</dt>
               <dd className="text-ink">{fullNumber(config.minVerifiedViews)} verified views</dd>
             </div>
+            <div className="flex justify-between gap-4 py-2.5">
+              <dt className="text-ink-3">Coin links to</dt>
+              <dd className="text-right">
+                <span className="text-ink">Its page on VYRAL</span>
+                <span className="block text-[11.5px] text-ink-4">Added to the token metadata automatically</span>
+              </dd>
+            </div>
             <div className="flex justify-between py-2.5">
               <dt className="text-ink-3">Deployer wallet</dt>
               <dd className={wallet ? "font-mono text-ink" : "text-ink-3"}>{wallet ? `${wallet.slice(0, 4)}…${wallet.slice(-4)}` : "Connect to launch"}</dd>

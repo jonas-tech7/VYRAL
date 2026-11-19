@@ -16,10 +16,19 @@ const optionalString = z
   .optional()
   .transform((v) => (v && v.trim().length > 0 ? v.trim() : undefined));
 
+/**
+ * Public base URL. Falls back to the production domain Vercel provides
+ * (VERCEL_PROJECT_PRODUCTION_URL), so links written into token metadata and
+ * sign-in messages never point at localhost on a deployment without APP_URL.
+ */
+const defaultAppUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  : "http://localhost:3000";
+
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-  APP_URL: z.string().url().default("http://localhost:3000"),
+  APP_URL: z.preprocess((v) => (typeof v === "string" && v.trim() ? v.trim() : undefined), z.string().url().default(defaultAppUrl)),
   /** Secret used for HMAC-hashing IPs and other non-reversible identifiers. */
   SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 characters"),
   /** 32-byte key (base64) used to encrypt OAuth tokens at rest. */

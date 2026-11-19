@@ -10,6 +10,7 @@ import { ApiError } from "@/lib/api/errors";
 import { getAllConfig } from "@/lib/config/store";
 import { db, schema } from "@/lib/db";
 import { env } from "@/lib/env";
+import { buildTokenMetadata, coinPageUrl, launchLinkUrl } from "@/lib/launch/metadata";
 import { LAUNCH_DECIMALS, LAUNCH_SUPPLY, launchProvider } from "@/lib/providers/launch";
 import { storageProvider } from "@/lib/providers/storage";
 import { simMarketCap, simPrice } from "@/lib/sim/market-sim";
@@ -69,30 +70,36 @@ export async function prepareLaunch(wallet: string, input: LaunchInput) {
   if (!upload) throw new ApiError(400, "invalid_request", "Upload the token image again.");
 
   const absolute = (u: string) => (u.startsWith("http") ? u : new URL(u, env.APP_URL).toString());
-  const metadata = {
+  const provider = launchProvider();
+  // Fix the address first where possible, so the metadata links to the coin's own page on VYRAL.
+  const launchId = randomUUID();
+  const reservedMint = provider.reserveMint ? await provider.reserveMint() : undefined;
+  const vyralUrl = reservedMint ? coinPageUrl(reservedMint, env.APP_URL) : launchLinkUrl(launchId, env.APP_URL);
+  const metadata = buildTokenMetadata({
     name: input.name,
     symbol: input.symbol,
     description: input.description,
-    image: absolute(upload.url),
-    external_url: input.links.website ?? null,
-    extensions: { website: input.links.website, twitter: input.links.x, telegram: input.links.telegram, discord: input.links.discord },
-    properties: { files: [{ uri: absolute(upload.url), type: upload.contentType }] },
-  };
+    imageUrl: absolute(upload.url),
+    imageContentType: upload.contentType,
+    links: input.links,
+    vyralUrl,
+  });
   const stored = await storageProvider().put(`metadata/${randomUUID()}.json`, Buffer.from(JSON.stringify(metadata)), "application/json");
   const metadataUri = absolute(stored.url);
 
-  const provider = launchProvider();
   const prepared = await provider.prepare({
     deployer: wallet,
     name: input.name,
     symbol: input.symbol,
     metadataUri,
     initialBuyLamports: Math.round(input.initialBuySol * 1e9),
+    mint: reservedMint,
   });
 
   const [req] = await db
     .insert(schema.launchRequests)
     .values({
+      id: launchId,
       deployerWallet: wallet,
       payload: { ...input, imageUrl: upload.url, metadataUri },
       mint: prepared.mint,

@@ -28,6 +28,8 @@ export type LaunchInput = {
   symbol: string;
   metadataUri: string;
   initialBuyLamports: number;
+  /** Address reserved with reserveMint(), when the provider supports it. */
+  mint?: string;
 };
 
 export type PreparedLaunch = {
@@ -45,6 +47,12 @@ export type LaunchConfirmation =
 export interface LaunchProvider {
   readonly id: "simulated" | "external";
   readonly isSimulated: boolean;
+  /**
+   * Optionally fixes the token address before the metadata is written, so the
+   * metadata can link to the coin's own page. Providers that only learn the
+   * address in prepare() omit this (the link then uses /l/<launch id>).
+   */
+  reserveMint?(): Promise<string>;
   prepare(input: LaunchInput): Promise<PreparedLaunch>;
   confirm(args: { prepared: PreparedLaunch; deployer: string; signature: string }): Promise<LaunchConfirmation>;
 }
@@ -55,8 +63,12 @@ class SimulatedLaunchProvider implements LaunchProvider {
   readonly id = "simulated" as const;
   readonly isSimulated = true;
 
+  async reserveMint(): Promise<string> {
+    return Keypair.generate().publicKey.toBase58();
+  }
+
   async prepare(input: LaunchInput): Promise<PreparedLaunch> {
-    const mint = Keypair.generate().publicKey.toBase58();
+    const mint = input.mint ?? (await this.reserveMint());
     const expiresAt = new Date(Date.now() + EXPIRY_MS);
     const intentMessage = [
       "VYRAL launch request",
