@@ -10,7 +10,7 @@
 import { and, eq, gt, isNull, lt } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { env } from "@/lib/env";
-import { randomToken } from "@/lib/security/crypto";
+import { randomBytes } from "node:crypto";
 import { verifyWalletSignature } from "@/lib/solana/keys";
 import { TERMS_VERSION } from "@/lib/legal";
 
@@ -54,7 +54,8 @@ export async function issueNonce(
   purpose: NoncePurpose,
   build: (nonce: string, issuedAt: Date, expiresAt: Date) => string,
 ): Promise<{ nonce: string; message: string; expiresAt: Date }> {
-  const nonce = randomToken(18);
+  // Sign-In With Solana requires an alphanumeric nonce; wallets (Phantom) reject "-" or "_".
+  const nonce = randomBytes(16).toString("hex");
   const issuedAt = new Date();
   const expiresAt = new Date(issuedAt.getTime() + NONCE_TTL_MS);
   const message = build(nonce, issuedAt, expiresAt);
