@@ -48,7 +48,9 @@ describe("Viral Score", () => {
     expect(m.x.source.note).toMatch(/^Estimate/);
     // Metricool 2026 averages per video, square-root dampened.
     expect(m.youtube.view).toBeCloseTo(Math.sqrt(32_895 / 5_321), 2);
-    expect(m.youtube.like).toBeCloseTo(Math.sqrt(1_097 / 88), 2);
+    // The formula gives √(1,097 / 88) ≈ 3.53; YouTube Shorts likes are capped at 1.75.
+    expect(Math.sqrt(1_097 / 88)).toBeCloseTo(3.53, 2);
+    expect(m.youtube.like).toBe(1.75);
     expect(m.instagram.view).toBeCloseTo(Math.sqrt(32_895 / 23_074), 2);
     expect(m.instagram.like).toBeCloseTo(Math.sqrt(1_097 / 765), 2);
     // Socialinsider 2026 comments per video.

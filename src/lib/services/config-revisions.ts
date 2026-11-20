@@ -55,6 +55,14 @@ const X_ESTIMATE: Revision<"scoring"> = {
   note: "Default revision: X uses the Instagram Reels values as an estimate until VYRAL has its own data.",
 };
 
+const YOUTUBE_LIKE_CAPPED: Revision<"scoring"> = {
+  id: "2026-11-youtube-like-cap",
+  key: "scoring",
+  appliesTo: (c) => c.multipliers.youtube.like === 3.53,
+  next: (c) => ({ ...c, multipliers: { ...c.multipliers, youtube: structuredClone(DEFAULT_CONFIG.scoring.multipliers.youtube) } }),
+  note: "Default revision: the YouTube Shorts like multiplier is capped at 1.75 (the benchmark formula gives 3.53).",
+};
+
 const FEE_SPLIT_FLAT: Revision<"reward_curve"> = {
   id: "2026-11-pumpfun-fee-split",
   key: "reward_curve",
@@ -88,6 +96,10 @@ export async function applyDefaultRevisions(): Promise<string[]> {
   }
   if (await run(X_ESTIMATE)) {
     applied.push(X_ESTIMATE.id);
+    rescore = true;
+  }
+  if (await run(YOUTUBE_LIKE_CAPPED)) {
+    applied.push(YOUTUBE_LIKE_CAPPED.id);
     rescore = true;
   }
   if (rescore) await rescoreAllActive();

@@ -30,6 +30,9 @@ export const MULTIPLIER_METHOD = "benchmark-sqrt-v1";
  * therefore includes both how hard views are to get on a platform and how
  * often viewers like.
  */
+/** The YouTube Shorts like multiplier is capped: the formula's 3.53 would let likes on one platform dominate. */
+export const YOUTUBE_LIKE_CAP = 1.75;
+
 export const BENCHMARK_MULTIPLIERS: Record<Platform, PlatformMultiplier> = {
   tiktok: {
     view: 1,
@@ -39,13 +42,14 @@ export const BENCHMARK_MULTIPLIERS: Record<Platform, PlatformMultiplier> = {
   },
   youtube: {
     view: 2.49,
-    like: 3.53,
+    like: YOUTUBE_LIKE_CAP,
     comment: 2.24,
     source: {
       kind: "manual",
       note:
         `${MULTIPLIER_METHOD}. Views: Metricool, State of Short-Form Social Media 2026 (6.18M videos), avg 32,895 TikTok vs 5,321 Shorts. ` +
-        "Likes: same study (secondary summary), avg 1,097 vs 88. Comments: Socialinsider, TikTok vs Reels vs Shorts 2026 (secondary summary), avg 50 vs 10.",
+        "Likes: same study (secondary summary), avg 1,097 vs 88; the formula gives 3.53, capped at 1.75 so likes on one platform can't dominate. " +
+        "Comments: Socialinsider, TikTok vs Reels vs Shorts 2026 (secondary summary), avg 50 vs 10.",
     },
   },
   instagram: {

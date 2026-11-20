@@ -333,7 +333,8 @@ async function Content() {
           </li>
           <li>
             <span className="text-ink">Dampened on purpose:</span> the square root keeps the direction but avoids over-correcting, because study averages
-            mix very different account sizes.
+            mix very different account sizes. YouTube Shorts likes are capped at ×1.75 (the formula alone gives ×3.53), so likes on one platform
+            can&apos;t dominate.
           </li>
           <li>
             <span className="text-ink">Careful where data is thin:</span> where sources disagree (Instagram comments), the value stays ×1.00. X has no

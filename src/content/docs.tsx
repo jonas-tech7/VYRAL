@@ -260,8 +260,9 @@ const viralScore: DocPage = {
       <ul>
         <li>
           <strong>Why the square root?</strong> Platform averages mix very different account sizes and content types. Full ratios (YouTube likes: 12.5×)
-          would over-correct; the square root keeps the direction and dampens the size (3.53×). A typical Short still ranks below a typical TikTok video
-          with the same relative performance, but the gap narrows.
+          would over-correct; the square root keeps the direction and dampens the size (3.53×). YouTube Shorts likes are additionally capped at
+          1.75×, so likes on one platform can&apos;t dominate the ranking. A typical Short still ranks below a typical TikTok video with the same
+          relative performance, but the gap narrows.
         </li>
         <li>
           <strong>Where sources disagree</strong>, the multiplier stays neutral: Metricool reports Reels with the most comments per video, Socialinsider
