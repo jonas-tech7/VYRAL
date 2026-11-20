@@ -77,8 +77,15 @@ class EnvKeypairSigner implements TransactionSigner {
   private keypair: Keypair;
   constructor(secretBase58: string) {
     // Read from the environment at runtime only; never persisted or logged.
-    const v = secretBase58.trim();
-    this.keypair = Keypair.fromSecretKey(v.startsWith("[") ? Uint8Array.from(JSON.parse(v) as number[]) : bs58.decode(v));
+    const v = secretBase58.trim().replace(/^["']|["']$/g, "");
+    try {
+      this.keypair = Keypair.fromSecretKey(v.startsWith("[") ? Uint8Array.from(JSON.parse(v) as number[]) : bs58.decode(v));
+    } catch {
+      // Never include the value in the message.
+      throw new Error(
+        "PAYOUT_SIGNER_SECRET_KEY is not a valid Solana private key. Paste the private key exported from Phantom (Show Private Key), not the recovery phrase or the address.",
+      );
+    }
   }
   get publicKey() {
     return this.keypair.publicKey;
