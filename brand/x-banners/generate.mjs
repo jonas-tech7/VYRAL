@@ -146,7 +146,7 @@ concepts["02-geometric-depth"] = () => {
   <g fill="#000" opacity="0.9" filter="url(#soft)">${shadow}</g>
   <g>${sym.map((u) => slab(u, 14, { top: "#ffffff", left: "#a3a3a3", right: "#5e5e5e" })).join("")}</g>
   ${wordmark(132, 212, 54)}
-  ${mono(134, 254, 15, "LAUNCH · CREATE · GET PAID", "#7d7d7d")}`;
+  ${mono(134, 254, 15, "LAUNCH · CREATE · COMPETE", "#7d7d7d")}`;
 };
 
 /* 03 Abstract Technical System: the construction of the mark as a technical drawing. */
