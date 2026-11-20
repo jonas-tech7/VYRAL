@@ -151,7 +151,8 @@ export const launchesOpen = !(isProductionDeployment && env.LAUNCH_PROVIDER === 
  * credentials are refused with a clear message.
  */
 export function platformConfigured(platform: "youtube" | "tiktok" | "instagram" | "x"): boolean {
-  if (env.SOCIAL_PROVIDER === "mock") return true;
+  // Simulated video stats: fine for the demo, never on the production site (real payouts would follow fake views).
+  if (env.SOCIAL_PROVIDER === "mock") return !isProductionDeployment;
   switch (platform) {
     case "youtube":
       return Boolean(env.YOUTUBE_API_KEY && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);

@@ -47,7 +47,7 @@ async function GoLive() {
             <Row key={c.label} {...c} />
           ))}
           {r.platforms.map((p) => (
-            <Row key={p.platform} ok={p.ok} label={`${PLATFORM_LABEL[p.platform]} submissions`} detail={p.ok ? "API keys set" : "Opens when its API keys are set"} />
+            <Row key={p.platform} ok={p.ok} label={`${PLATFORM_LABEL[p.platform]} submissions`} detail={p.ok ? "API keys set" : "Opens with SOCIAL_PROVIDER=live and its API keys"} />
           ))}
           <Row ok={r.vaultLamports !== null && r.vaultLamports >= 20_000_000} label="Reward vault balance" detail={r.vaultLamports === null ? "Unknown" : `${sol(r.vaultLamports)} (keep ≥ 0.02 SOL for network fees)`} />
           <Row ok={r.demoTokens === 0} label="Demonstration data removed" detail={`${r.demoTokens} demo coins`} />
