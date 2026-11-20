@@ -5,6 +5,8 @@ import { CurveChart } from "@/components/charts/curve-chart";
 import { Button } from "@/components/ui/button";
 import type { EligibilityConfig, FraudConfig, PayoutConfig, RewardCurveConfig } from "@/lib/config/schemas";
 import { PLATFORM_LABEL, PLATFORMS } from "@/lib/domain/platforms";
+import { bpsToPct } from "@/lib/format";
+import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
 import { ConfigForm, NumberInput } from "./config-form";
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -35,12 +37,26 @@ export function RewardCurveEditor({ initial, version }: { initial: RewardCurveCo
     >
       {(c, set) => (
         <div className="grid gap-8 lg:grid-cols-[1fr_1fr]">
+          <div className="rounded-md border border-edge bg-raised p-4 text-[12.5px] leading-relaxed text-ink-2 lg:col-span-2">
+            <p className="font-medium text-ink">How a coin&apos;s creator fees are split</p>
+            <ul className="mt-2 grid gap-1">
+              <li>
+                <span className="num text-ink">{bpsToPct(CREATOR_FEE_SPLIT.deployerBps)}</span> to the deployer, paid directly by pump.fun. Locked at launch;
+                not set here.
+              </li>
+              <li>
+                <span className="num text-ink">{bpsToPct(CREATOR_FEE_SPLIT.vaultBps)}</span> to the reward vault. The curve below sets how much of this half the
+                winning video is paid. At the first point&apos;s share, the winner gets{" "}
+                <span className="num text-ink">{bpsToPct((CREATOR_FEE_SPLIT.vaultBps * (c.points[0]?.rewardBps ?? 0)) / 10_000)}</span> of all creator fees.
+              </li>
+            </ul>
+          </div>
           <div>
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="text-left text-[12px] text-ink-3">
                   <th className="pb-2 font-normal">Market cap (USD)</th>
-                  <th className="pb-2 font-normal">Reward share</th>
+                  <th className="pb-2 font-normal">Share of the vault half</th>
                   <th className="pb-2" />
                 </tr>
               </thead>
