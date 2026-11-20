@@ -82,9 +82,9 @@ describe("pump.fun fee attribution", () => {
     expect(r.unattributed).toBeNull();
   });
 
-  it("adds back the network fee when the vault itself paid it", () => {
+  it("credits only the net amount when the vault itself paid the network fee", () => {
     const r = attributeVaultDeposit(tx({ vaultDelta: 400_000 - 5_000, keys: [VAULT, scA, mintA] }), VAULT, coins);
-    expect(r.credits[0].amountLamports).toBe(400_000);
+    expect(r.credits[0].amountLamports).toBe(395_000);
   });
 
   it("ignores payouts, plain deposits and failed transactions", () => {

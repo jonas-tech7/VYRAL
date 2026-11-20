@@ -49,7 +49,7 @@ export type PreparedLaunch = {
 };
 
 export type LaunchConfirmation =
-  | { ok: true; launchSignature: string | null; poolAddress: string | null }
+  | { ok: true; launchSignature: string | null; poolAddress: string | null; /** On-chain block time of the launch, when known. */ launchedAt?: Date | null }
   | { ok: false; error: string };
 
 export interface LaunchProvider {
@@ -205,7 +205,12 @@ class PumpFunLaunchProvider implements LaunchProvider {
       platform: platformRecipients(),
     });
     if (!verified.ok) return { ok: false as const, error: verified.error };
-    return { ok: true as const, launchSignature: signature, poolAddress: verified.bondingCurve };
+    return {
+      ok: true as const,
+      launchSignature: signature,
+      poolAddress: verified.bondingCurve,
+      launchedAt: tx.blockTime ? new Date(tx.blockTime * 1000) : null,
+    };
   }
 }
 

@@ -10,7 +10,7 @@ import { Container, Skeleton } from "@/components/ui/misc";
 import { isEstimate } from "@/lib/config/defaults";
 import { getAllConfig } from "@/lib/config/store";
 import { PLATFORM_LABEL, PLATFORMS } from "@/lib/domain/platforms";
-import { bpsToPct, cn, fullNumber } from "@/lib/format";
+import { bpsToPct, cn, fullNumber, sol } from "@/lib/format";
 import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
 
 export const metadata: Metadata = {
@@ -119,10 +119,12 @@ async function Content() {
   const sc = scoring.value;
   const minViews = fullNumber(eligibility.value.minVerifiedViews);
   const intervals = payouts.value.allowedIntervalsHours.map((h) => `${h}h`).join(" or ");
+  const minPayout = sol(payouts.value.minPayoutLamports);
   const vaultPct = bpsToPct(CREATOR_FEE_SPLIT.vaultBps);
   const deployerPct = bpsToPct(CREATOR_FEE_SPLIT.deployerBps);
   const buybackPct = bpsToPct(CREATOR_FEE_SPLIT.buybackBps);
   const treasuryPct = bpsToPct(CREATOR_FEE_SPLIT.treasuryBps);
+  const platformPct = bpsToPct(CREATOR_FEE_SPLIT.treasuryBps + CREATOR_FEE_SPLIT.buybackBps);
 
   return (
     <div className="min-w-0 max-w-[820px]">
@@ -146,7 +148,7 @@ async function Content() {
         <h3 className="mt-8 text-[15px] font-medium text-ink">{vaultPct} · The competition</h3>
         <p className="mt-2">
           The largest share belongs to the people who make a coin visible. It is routed to VYRAL&apos;s reward vault and credited to the coin it came
-          from. At every checkpoint, every 3 or 6 hours, the creator of the highest-ranked eligible video receives everything the coin has collected
+          from. At every checkpoint, every {intervals} depending on the coin, the creator of the highest-ranked eligible video receives everything the coin has collected
           since the last payout. If no video qualifies, nothing is lost: the amount rolls over to the next checkpoint.
         </p>
         <h3 className="mt-6 text-[15px] font-medium text-ink">{deployerPct} · The deployer</h3>
@@ -158,12 +160,17 @@ async function Content() {
         <p className="mt-2">
           Every coin on the platform supports $VYRAL, the platform&apos;s own coin. This share buys $VYRAL on the open market and every token bought is
           burned, permanently reducing the supply. Purchases run automatically in small steps, so a single buy never moves the price much, and every
-          buy and burn is published with its transaction on the <A href="/burns">Buyback &amp; burn</A> page.
+          buy and burn is published with its transaction on the <A href="/burns">Buyback &amp; burn</A> page. Buybacks begin once $VYRAL is live;
+          until then this share collects in the platform wallet.
         </p>
         <h3 className="mt-6 text-[15px] font-medium text-ink">{treasuryPct} · The treasury</h3>
         <p className="mt-2">
-          Keeps VYRAL running: infrastructure, verification of video metrics, payouts, security and new features. The buyback and treasury shares
-          arrive in one VYRAL platform wallet; a third of every deposit is forwarded to the treasury and the rest goes to the buyback, all on-chain.
+          Keeps VYRAL running: infrastructure, verification of video metrics, payouts, security and new features.
+        </p>
+        <p className="mt-4">
+          On-chain, every coin locks three shares: {vaultPct} to the competition vault, {deployerPct} to the deployer and {platformPct} to one VYRAL
+          platform wallet. VYRAL divides the platform share automatically: a third of every deposit is forwarded to the treasury and two thirds go to
+          the buyback. Every one of those transfers is public on the <A href="/burns">Buyback &amp; burn</A> page.
         </p>
         <ul className="mt-6 flex list-disc flex-col gap-2 pl-5 marker:text-ink-4">
           <li>
@@ -254,13 +261,13 @@ async function Content() {
         <p className="mt-6 text-ink">Checked automatically on every submission</p>
         <ul className="mt-3 flex list-disc flex-col gap-2 pl-5 marker:text-ink-4">
           <li>The post contains the coin&apos;s contract address (a link containing it counts too). This proves the video is about this coin.</li>
-          <li>The video was published after the coin launched. Older videos never qualify, even if edited or re-uploaded.</li>
+          <li>The video was published after the coin launched. Older videos never qualify, and edited or re-uploaded copies of videos already on VYRAL are flagged for review.</li>
           <li>It was published by your linked account, it is a short-form video, and it has not been entered before.</li>
           <li>You are within the limit of {eligibility.value.maxSubmissionsPerCreatorPerCompetition} entries per coin.</li>
         </ul>
         <p className="mt-4">
           The post text is checked again at every metrics refresh. If the contract address disappears later, the entry goes back to human review and
-          cannot win until it is restored.
+          cannot win until a reviewer clears it. The same happens if the video is deleted or made private.
         </p>
       </Section>
 
@@ -334,7 +341,7 @@ async function Content() {
           </li>
           <li>
             <span className="text-ink">Getting better over time:</span> once enough verified videos exist, the multipliers are recalibrated from
-            VYRAL&apos;s own data (medians, last 90 days). Every change is versioned and published.
+            VYRAL&apos;s own data (medians, last 90 days). Every change is versioned and recorded in the audit log.
           </li>
         </ul>
         <p className="mt-4 text-[13.5px] text-ink-3">
@@ -345,11 +352,12 @@ async function Content() {
       <Section id="payouts" index={7} title="Getting paid">
         <ul className="flex list-disc flex-col gap-2 pl-5 marker:text-ink-4">
           <li>
-            <span className="text-ink">Checkpoints:</span> every {intervals} (as chosen at launch), the highest-ranked eligible video receives the reward
-            for that round.
+            <span className="text-ink">Checkpoints:</span> every {intervals} (chosen at launch), the highest-ranked eligible video receives the reward
+            for that round. Rewards below {minPayout} roll over to the next round instead of being sent.
           </li>
           <li>
-            <span className="text-ink">Minimum {minViews} verified views:</span> a video only qualifies with at least {minViews} verified views. If no video
+            <span className="text-ink">Minimum {minViews} verified views:</span> a video only qualifies with at least {minViews} verified views (each
+            competition keeps the minimum that applied when its coin launched). If no video
             reaches it, nobody is paid that round and the fees roll over to the next one.
           </li>
           <li>
@@ -357,7 +365,8 @@ async function Content() {
             is confirmed, and anyone can check it on a Solana explorer.
           </li>
           <li>
-            <span className="text-ink">Under review means paused:</span> a video with open review flags cannot win until a person has cleared it.
+            <span className="text-ink">Under review means paused:</span> a video under review, or with an open medium- or high-severity flag, cannot win
+            until a person has cleared it.
           </li>
         </ul>
       </Section>

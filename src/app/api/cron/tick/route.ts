@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
   if (!secret || !safeEqual(provided, secret)) {
     return NextResponse.json({ error: { code: "unauthorized", message: "Invalid cron secret" } }, { status: 401 });
   }
-  const results = await runDueJobs();
+  // Vercel stops the function at maxDuration (60 s): no new job starts after 35 s; the rest run next minute.
+  const results = await runDueJobs(new Date(), 35_000);
   return NextResponse.json({ ok: true, results }, { headers: { "Cache-Control": "no-store" } });
 }

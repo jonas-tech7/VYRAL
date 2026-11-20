@@ -63,9 +63,15 @@ export async function syncMetrics(now = new Date()) {
     if (!r || r instanceof ProviderError) {
       failed++;
       if (r && (r.code === "not_found" || r.code === "unauthorized")) {
+        // Deleted, made private, or access revoked: its last numbers can no longer be checked, so it must not keep
+        // competing on frozen metrics. A verified video goes to review (a reviewer can reinstate it).
         await db
           .update(schema.videos)
-          .set({ metricsUpdatedAt: now, statusReason: v.status === "verified" ? v.statusReason : `metrics_unavailable:${r.code}` })
+          .set(
+            v.status === "verified"
+              ? { metricsUpdatedAt: now, status: "under_review", statusReason: `video_unavailable:${r.code}` }
+              : { metricsUpdatedAt: now, statusReason: `metrics_unavailable:${r.code}` },
+          )
           .where(eq(schema.videos.id, v.id));
       }
       continue;

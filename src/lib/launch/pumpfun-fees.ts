@@ -69,7 +69,7 @@ export type VaultTransaction = {
 export type CoinRef = { tokenId: string; mint: string };
 
 export type VaultDeposit = {
-  /** Lamports the vault received in the transaction (its balance change plus the network fee if it paid it). */
+  /** Lamports the vault received in the transaction (its net balance change). */
   received: number;
   credits: Array<CoinRef & { amountLamports: number; key: string }>;
   /** Set when the vault received a distribution it could not credit to a VYRAL coin. */
@@ -89,7 +89,9 @@ export function attributeVaultDeposit(tx: VaultTransaction, vault: string, coins
   if (tx.failed) return none(null);
   const i = tx.accountKeys.indexOf(vault);
   if (i < 0) return none(null);
-  const received = tx.postBalances[i] - tx.preBalances[i] + (i === 0 ? tx.fee : 0);
+  // Net change: when the vault itself paid the network fee (VYRAL's keeper), that fee is not credited, so the
+  // amounts credited to coins never exceed what the vault really holds.
+  const received = tx.postBalances[i] - tx.preBalances[i];
   if (received <= 0) return none(null);
 
   const events = tx.eventData.map(decodeDistributeEvent).filter((e): e is DistributeEvent => e !== null);

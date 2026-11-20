@@ -24,7 +24,8 @@ import { db, schema } from "@/lib/db";
 import { payoutExecutor, type ChainStatus } from "@/lib/providers/payouts";
 import { audit } from "./audit";
 
-const FEE_BUFFER_LAMPORTS = 50_000;
+/** Kept in the vault on every payout: the network fee plus the rent-exempt minimum of a system account (890,880 lamports). */
+const FEE_BUFFER_LAMPORTS = 50_000 + 890_880;
 
 type Attempt = typeof schema.payoutAttempts.$inferSelect;
 type Payout = typeof schema.payouts.$inferSelect;

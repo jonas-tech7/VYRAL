@@ -216,8 +216,8 @@ class PumpFunFeeProvider implements FeeProvider {
           ...instructions,
         );
         await signer.sign(tx);
-        const signature = await this.connection.sendRawTransaction(tx.serialize());
-        await this.connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, "confirmed");
+        // Not awaited to confirmation: the vault scan credits the deposit once it lands (this or a later tick).
+        await this.connection.sendRawTransaction(tx.serialize());
       } catch (err) {
         console.error(`[fees] distribution for ${t.mint} failed:`, err instanceof Error ? err.message : err);
       }

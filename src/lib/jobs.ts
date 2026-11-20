@@ -11,10 +11,12 @@ import { eq, sql } from "drizzle-orm";
 import { pruneSessions } from "@/lib/auth/session";
 import { pruneNonces } from "@/lib/auth/siws";
 import { db, pool, schema } from "@/lib/db";
+import { env, isProductionDeployment } from "@/lib/env";
 import { pruneRateLimits } from "@/lib/security/rate-limit";
 import { runBuyback } from "@/lib/services/buyback";
 import { processDueCheckpoints } from "@/lib/services/checkpoints";
 import { syncFees } from "@/lib/services/fees";
+import { reconcileLaunches } from "@/lib/services/launch";
 import { prunePriceSamples, samplePrices } from "@/lib/services/market";
 import { pruneSnapshots, syncMetrics } from "@/lib/services/metrics";
 import { executePayouts } from "@/lib/services/payouts";
@@ -22,13 +24,15 @@ import { pruneOAuthStates } from "@/lib/services/social-accounts";
 
 export type Job = { name: string; everyMs: number; run: () => Promise<unknown> };
 
+/** In priority order: checkpoints and payouts move money and are quick, so they always run first. */
 export const JOBS: Job[] = [
-  { name: "sample-prices", everyMs: 60_000, run: () => samplePrices() },
-  { name: "sync-fees", everyMs: 60_000, run: () => syncFees() },
-  { name: "sync-metrics", everyMs: 120_000, run: () => syncMetrics() },
   { name: "checkpoints", everyMs: 30_000, run: async () => ({ processed: (await processDueCheckpoints()).length }) },
   { name: "payouts", everyMs: 15_000, run: () => executePayouts() },
+  { name: "sync-fees", everyMs: 60_000, run: () => syncFees() },
+  { name: "sample-prices", everyMs: 60_000, run: () => samplePrices() },
+  { name: "reconcile-launches", everyMs: 5 * 60_000, run: () => reconcileLaunches() },
   { name: "buyback", everyMs: 10 * 60_000, run: () => runBuyback() },
+  { name: "sync-metrics", everyMs: 120_000, run: () => syncMetrics() },
   {
     name: "maintenance",
     everyMs: 3_600_000,
@@ -79,10 +83,18 @@ export async function runJob(job: Job): Promise<JobResult> {
   }
 }
 
-/** Runs every job that is due according to its interval (based on the last successful run). */
-export async function runDueJobs(now = new Date()): Promise<JobResult[]> {
+/**
+ * Runs every job that is due according to its interval (based on the last run), in priority order.
+ * budgetMs: no new job starts once this much time has passed (serverless functions have a hard limit;
+ * jobs that don't start now run on the next call).
+ */
+export async function runDueJobs(now = new Date(), budgetMs = Infinity): Promise<JobResult[]> {
   const results: JobResult[] = [];
+  const started = Date.now();
   for (const job of JOBS) {
+    if (Date.now() - started > budgetMs) break;
+    // The production site never records simulated payouts as paid.
+    if (isProductionDeployment && env.PAYOUT_EXECUTOR === "simulated" && (job.name === "checkpoints" || job.name === "payouts")) continue;
     // Latest run of this job (any status) to respect its interval.
     const lastRun = await db.execute<{ started_at: string | null }>(
       sql`SELECT max(started_at) AS started_at FROM job_runs WHERE job = ${job.name}`,

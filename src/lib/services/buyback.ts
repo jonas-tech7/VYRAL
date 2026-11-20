@@ -246,7 +246,8 @@ async function sendRecorded(c: Connection, ledger: Ledger, pending: Pending, raw
   ledger.pending = pending;
   await saveLedger(ledger);
   await c.sendRawTransaction(raw, { maxRetries: 3 });
-  for (let i = 0; i < 30; i++) {
+  // Wait briefly (serverless time limit); a later run settles it from the chain otherwise.
+  for (let i = 0; i < 8; i++) {
     if (await settle(c, ledger, pending)) return;
     await new Promise((r) => setTimeout(r, 2_000));
   }

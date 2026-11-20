@@ -37,6 +37,9 @@ import {
   type LeaderboardEntry,
 } from "@/lib/rewards/allocation";
 import { curveIsFlat, rewardBpsForMarketCap } from "@/lib/rewards/curve";
+
+/** Lamports kept back from each real payout to cover its network fee (priority fee included). */
+const PAYOUT_NETWORK_FEE_RESERVE = 10_000;
 import { computeReferenceMarketCap } from "@/lib/rewards/reference-market-cap";
 import { audit } from "./audit";
 
@@ -157,6 +160,8 @@ export async function processCheckpoint(competitionId: string, scheduledAt: Date
           eq(schema.feeEvents.tokenId, token.id),
           eq(schema.feeEvents.status, "confirmed"),
           isNull(schema.feeEvents.checkpointId),
+          // Real payouts only ever spend real, on-chain fees: simulated fees can never be paid out in SOL.
+          executor.isSimulated ? undefined : eq(schema.feeEvents.isSimulated, false),
           lte(schema.feeEvents.confirmedAt, scheduledAt),
         ),
       )
@@ -235,7 +240,11 @@ export async function processCheckpoint(competitionId: string, scheduledAt: Date
     }
 
     const rewardBps = rewardBpsForMarketCap(competition.rewardCurve, ref.ok ? ref.marketCapUsd : 0);
-    const allocation = allocateFees(fees, rewardBps);
+    const allocated = allocateFees(fees, rewardBps);
+    // Real payouts leave a small reserve in the vault for the transfer's own network fee, so the vault never pays
+    // fees out of other competitions' money.
+    const feeReserve = executor.isSimulated ? 0 : Math.min(PAYOUT_NETWORK_FEE_RESERVE, allocated.rewardLamports);
+    const allocation = { rewardLamports: allocated.rewardLamports - feeReserve, retainedLamports: allocated.retainedLamports + feeReserve };
 
     if (!winner) {
       await finish("no_eligible_winner", { ...common, rewardBps, note: "No eligible video; fees roll over" });

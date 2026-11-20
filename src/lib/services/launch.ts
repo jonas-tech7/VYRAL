@@ -188,7 +188,8 @@ export async function confirmLaunch(wallet: string, launchId: string, signature:
         launchSignature: result.launchSignature,
         decimals: LAUNCH_DECIMALS,
         totalSupply: LAUNCH_SUPPLY,
-        launchedAt: now,
+        // The coin's real creation time: videos published after it qualify, even while the confirmation was in flight.
+        launchedAt: result.launchedAt && result.launchedAt < now ? result.launchedAt : now,
         ...(simulated
           ? {
               priceUsd: simPrice(req.mint, now, now),
@@ -248,4 +249,45 @@ export async function confirmLaunch(wallet: string, launchId: string, signature:
     );
   }
   return launched;
+}
+
+/**
+ * Launches whose transaction landed on-chain but whose confirmation never
+ * reached VYRAL (closed tab, lost connection). The coin exists and its fees
+ * are already locked to the vault, so it is verified from the chain and
+ * recorded like any other launch; its competition opens and its fees are
+ * credited from then on. (An official-coin flag is not applied here; an
+ * administrator can set the coin in the admin dashboard.)
+ */
+export async function reconcileLaunches(now = new Date()) {
+  const provider = launchProvider();
+  if (provider.isSimulated || provider.id !== "pumpfun" || !env.SOLANA_RPC_URL) return { skipped: true };
+  const { Connection, PublicKey } = await import("@solana/web3.js");
+  const connection = new Connection(env.SOLANA_RPC_URL, "confirmed");
+  const pending = await db
+    .select({ id: schema.launchRequests.id, mint: schema.launchRequests.mint, deployer: schema.launchRequests.deployerWallet })
+    .from(schema.launchRequests)
+    .where(
+      and(
+        eq(schema.launchRequests.status, "prepared"),
+        sql`${schema.launchRequests.transaction} IS NOT NULL`,
+        sql`${schema.launchRequests.createdAt} < ${new Date(now.getTime() - 3 * 60_000)}`,
+        sql`${schema.launchRequests.createdAt} > ${new Date(now.getTime() - 7 * 86_400_000)}`,
+      ),
+    )
+    .limit(10);
+  let recorded = 0;
+  for (const r of pending) {
+    try {
+      // The oldest transaction touching the mint is the one that created it.
+      const sigs = await connection.getSignaturesForAddress(new PublicKey(r.mint), { limit: 1000 }, "confirmed");
+      const created = [...sigs].reverse().find((s) => !s.err);
+      if (!created) continue; // never landed: nothing to record
+      await confirmLaunch(r.deployer, r.id, created.signature, null);
+      recorded++;
+    } catch (err) {
+      console.error(`[launch] reconcile ${r.mint} failed:`, err instanceof Error ? err.message : err);
+    }
+  }
+  return { checked: pending.length, recorded };
 }
