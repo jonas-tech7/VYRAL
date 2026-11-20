@@ -72,7 +72,7 @@ async function Results({ searchParams }: Pick<PageProps<"/competitions">, "searc
         />
         <SearchForm action="/competitions" defaultValue={q} placeholder="Search name, ticker or mint" hidden={{ sort: sort === "trending" ? undefined : sort }} />
       </div>
-      <CompetitionsTable items={items} now={new Date()} />
+      <CompetitionsTable items={items} now={new Date()} emptyText={q ? undefined : "No competitions yet. They open as soon as the first coins launch."} />
       <Pagination page={page} total={total} pageSize={PAGE_SIZE} href={(p) => href({ page: p })} />
     </div>
   );

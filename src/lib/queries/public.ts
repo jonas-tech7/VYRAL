@@ -5,7 +5,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db";
 import type { RewardCurve } from "@/lib/db/schema";
-import { isDemoMode } from "@/lib/env";
+import { showDemo } from "@/lib/env";
 import type { Platform } from "@/lib/domain/platforms";
 import { marketProvider } from "@/lib/providers/market";
 import { eligibilityOf, type IneligibilityReason } from "@/lib/rewards/allocation";
@@ -67,7 +67,7 @@ export async function getPlatformStats(): Promise<PlatformStats> {
     totalViews: n(r.views),
     videosSubmitted: n(r.videos),
     solUsd: await solUsd(),
-    demo: isDemoMode,
+    demo: showDemo,
   };
 }
 

@@ -9,7 +9,17 @@ import { TokenCell } from "./token-cell";
 type Variant = "home" | "full";
 
 /** Competition list shared by the homepage (trending) and /competitions. */
-export function CompetitionsTable({ items, variant = "full", now }: { items: CompetitionListItem[]; variant?: Variant; now: Date }) {
+export function CompetitionsTable({
+  items,
+  variant = "full",
+  now,
+  emptyText,
+}: {
+  items: CompetitionListItem[];
+  variant?: Variant;
+  now: Date;
+  emptyText?: string;
+}) {
   const cols = variant === "home" ? 7 : 8;
   return (
     <Table minWidth={variant === "home" ? 860 : 960}>
@@ -27,7 +37,7 @@ export function CompetitionsTable({ items, variant = "full", now }: { items: Com
         <TH align="right">Status</TH>
       </THead>
       <tbody>
-        {items.length === 0 ? <EmptyRow colSpan={cols}>No competitions match these filters.</EmptyRow> : null}
+        {items.length === 0 ? <EmptyRow colSpan={cols}>{emptyText ?? "No competitions match these filters."}</EmptyRow> : null}
         {items.map((c) => (
           <TR key={c.competitionId} interactive>
             <TD>

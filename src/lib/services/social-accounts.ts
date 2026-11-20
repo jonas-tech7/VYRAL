@@ -5,7 +5,7 @@
 import { and, eq, isNull, lt } from "drizzle-orm";
 import { ApiError } from "@/lib/api/errors";
 import { db, schema } from "@/lib/db";
-import { env } from "@/lib/env";
+import { env, isProductionDeployment } from "@/lib/env";
 import type { Platform } from "@/lib/domain/platforms";
 import { simulatedAccountId } from "@/lib/providers/social/mock";
 import {
@@ -110,7 +110,7 @@ async function upsertLink(
 
 /** Development only: links a handle without OAuth while the mock provider is active. */
 export async function simulateLink(wallet: string, platform: Platform, handle: string): Promise<LinkedAccount> {
-  if (env.SOCIAL_PROVIDER !== "mock") throw new ApiError(400, "not_available", "Simulated linking is only available in demo mode.");
+  if (env.SOCIAL_PROVIDER !== "mock" || isProductionDeployment) throw new ApiError(400, "not_available", "Simulated linking is only available in demo mode.");
   const clean = handle.replace(/^@/, "").trim();
   if (!/^[A-Za-z0-9._]{2,40}$/.test(clean)) throw new ApiError(400, "invalid_request", "Enter a valid handle.");
   return upsertLink(wallet, platform, { platformAccountId: simulatedAccountId(platform, clean), handle: clean }, "simulated");

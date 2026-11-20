@@ -10,7 +10,7 @@ import { ApiError } from "@/lib/api/errors";
 import { hasRole, type Viewer } from "@/lib/auth/session";
 import { getAllConfig, updateConfig } from "@/lib/config/store";
 import { db, schema } from "@/lib/db";
-import { env } from "@/lib/env";
+import { env, launchesOpen } from "@/lib/env";
 import { buildTokenMetadata, coinPageUrl, launchLinkUrl } from "@/lib/launch/metadata";
 import { TERMS_VERSION } from "@/lib/legal";
 import { LAUNCH_DECIMALS, LAUNCH_SUPPLY, launchProvider } from "@/lib/providers/launch";
@@ -65,6 +65,7 @@ export const launchInputSchema = z.object({
 export type LaunchInput = z.infer<typeof launchInputSchema>;
 
 export async function prepareLaunch(wallet: string, input: LaunchInput, viewer?: Viewer | null) {
+  if (!launchesOpen) throw new ApiError(503, "launches_closed", "Launching opens soon.");
   if (input.official && !hasRole(viewer ?? null, "admin")) throw new ApiError(403, "forbidden", "Only administrators can launch the official coin.");
   if (input.official && launchProvider().isSimulated) throw new ApiError(400, "simulated", "The official coin can only be launched on-chain, not in the demonstration environment.");
   const configs = await getAllConfig();

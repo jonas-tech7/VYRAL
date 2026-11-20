@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { LaunchForm } from "@/components/launch/launch-form";
-import { Container, PageHeader, Skeleton } from "@/components/ui/misc";
+import { Container, Notice, PageHeader, Skeleton } from "@/components/ui/misc";
 import { hasRole } from "@/lib/auth/session";
 import { getViewer } from "@/lib/auth/viewer";
 import { getAllConfig } from "@/lib/config/store";
+import { launchesOpen } from "@/lib/env";
 import { LAUNCH_SUPPLY, launchProvider } from "@/lib/providers/launch";
 
 export const metadata: Metadata = {
@@ -29,6 +30,13 @@ export default function LaunchPage() {
 
 async function LaunchContent() {
   await connection();
+  if (!launchesOpen) {
+    return (
+      <Notice className="max-w-[640px]">
+        Launching opens soon. Every coin launched on VYRAL goes live on pump.fun with its own video competition.
+      </Notice>
+    );
+  }
   const [cfg, viewer] = await Promise.all([getAllConfig(), getViewer()]);
   return (
     <LaunchForm

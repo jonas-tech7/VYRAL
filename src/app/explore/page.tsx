@@ -80,7 +80,7 @@ async function Tokens({ searchParams }: Pick<PageProps<"/explore">, "searchParam
           <TH align="right">Age</TH>
         </THead>
         <tbody>
-          {items.length === 0 ? <EmptyRow colSpan={8}>No tokens match your search.</EmptyRow> : null}
+          {items.length === 0 ? <EmptyRow colSpan={8}>{q ? "No tokens match your search." : "No coins launched yet."}</EmptyRow> : null}
           {items.map((t, i) => (
             <TR key={t.tokenId} interactive>
               <TD className="font-mono text-[12px] text-ink-4">{(page - 1) * PAGE_SIZE + i + 1}</TD>

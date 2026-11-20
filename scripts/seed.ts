@@ -40,7 +40,12 @@ async function main() {
   const { simulatedAccountId } = await import("@/lib/providers/social/mock");
 
   // Never mix demo data into a live deployment.
-  const { isDemoMode } = await import("@/lib/env");
+  const { isDemoMode, isProductionDeployment } = await import("@/lib/env");
+  if (isProductionDeployment) {
+    console.log("Production deployment: demo data is never seeded.");
+    await pool.end();
+    return;
+  }
   if (!isDemoMode) {
     console.log("Live providers are configured; demo data is never seeded in production.");
     await pool.end();

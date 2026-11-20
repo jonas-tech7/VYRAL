@@ -132,6 +132,20 @@ export const isDemoMode =
   env.PAYOUT_EXECUTOR === "simulated";
 
 /**
+ * The public production site (Vercel sets VERCEL_ENV=production). It never
+ * shows demonstration data, banners or simulated launches, even while the
+ * live providers are still being configured: until then it simply has no
+ * coins and launching shows "opens soon".
+ */
+export const isProductionDeployment = process.env.VERCEL_ENV === "production";
+
+/** Demonstration content is shown: demo providers, and not on the production site. */
+export const showDemo = isDemoMode && !isProductionDeployment;
+
+/** Launching is possible: always outside production, on production only with a real launch provider. */
+export const launchesOpen = !(isProductionDeployment && env.LAUNCH_PROVIDER === "simulated");
+
+/**
  * Platforms whose API credentials are configured. With SOCIAL_PROVIDER=mock
  * every platform works (simulated); live submissions for a platform without
  * credentials are refused with a clear message.
