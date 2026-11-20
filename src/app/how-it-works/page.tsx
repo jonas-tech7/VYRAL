@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import { Suspense, type ReactNode } from "react";
 import { ScoreCalculator } from "@/components/home/score-calculator";
 import { ScoreFormula } from "@/components/home/score-formula";
+import { FeeSplitBar } from "@/components/fee-split";
 import { ButtonLink } from "@/components/ui/button";
 import { Container, Skeleton } from "@/components/ui/misc";
 import { isEstimate } from "@/lib/config/defaults";
@@ -18,13 +19,13 @@ export const metadata: Metadata = {
 };
 
 const SECTIONS = [
+  { id: "fees", title: "Where the fees go" },
   { id: "idea", title: "The idea" },
   { id: "launch", title: "Launching a coin" },
   { id: "creators", title: "Taking part as a creator" },
   { id: "score", title: "The Viral Score" },
   { id: "multipliers", title: "Platform multipliers" },
   { id: "payouts", title: "Getting paid" },
-  { id: "fees", title: "Where the money comes from" },
   { id: "fair-play", title: "Fair play" },
   { id: "safety", title: "Safety and risks" },
 ] as const;
@@ -96,6 +97,16 @@ function Rule({ value, label }: { value: string; label: string }) {
   );
 }
 
+function SplitTile({ pct, title, text, accent = false }: { pct: string; title: string; text: string; accent?: boolean }) {
+  return (
+    <div className="bg-canvas px-5 py-5">
+      <p className={cn("num text-[34px] font-semibold leading-none tracking-[-0.03em]", accent ? "text-accent" : "text-ink")}>{pct}</p>
+      <p className="mt-3 text-[13px] font-medium text-ink">{title}</p>
+      <p className="mt-1 text-[12.5px] leading-snug text-ink-3">{text}</p>
+    </div>
+  );
+}
+
 const A = ({ href, children }: { href: string; children: ReactNode }) => (
   <Link href={href} className="text-ink underline decoration-edge-strong underline-offset-[3px] hover:decoration-accent">
     {children}
@@ -115,7 +126,65 @@ async function Content() {
 
   return (
     <div className="min-w-0 max-w-[820px]">
-      <Section id="idea" index={1} title="The idea">
+      <Section id="fees" index={1} title="Where the fees go">
+        <p>
+          Every coin launched on VYRAL earns creator fees each time it is traded on pump.fun. Before the coin exists, VYRAL writes how those fees are
+          divided into the launch transaction itself and locks it on-chain. The split is the same for every coin, it is public, and once the coin is
+          live nobody can change it: not the deployer, not VYRAL.
+        </p>
+        <div className="mt-6 overflow-hidden rounded-lg border border-edge">
+          <div className="grid grid-cols-2 gap-px bg-edge sm:grid-cols-4">
+            <SplitTile pct={vaultPct} title="Competition" text="Paid to the creator of the top eligible video at every checkpoint." accent />
+            <SplitTile pct={deployerPct} title="Deployer" text="Paid to the wallet that launched the coin, directly by pump.fun." />
+            <SplitTile pct={buybackPct} title="Buyback & burn" text="Buys $VYRAL on the open market; every token bought is burned." />
+            <SplitTile pct={treasuryPct} title="Treasury" text="Funds operations, infrastructure and development." />
+          </div>
+          <div className="border-t border-edge bg-canvas px-5 py-4">
+            <FeeSplitBar />
+          </div>
+        </div>
+        <h3 className="mt-8 text-[15px] font-medium text-ink">{vaultPct} · The competition</h3>
+        <p className="mt-2">
+          The largest share belongs to the people who make a coin visible. It is routed to VYRAL&apos;s reward vault and credited to the coin it came
+          from. At every checkpoint, every 3 or 6 hours, the creator of the highest-ranked eligible video receives everything the coin has collected
+          since the last payout. If no video qualifies, nothing is lost: the amount rolls over to the next checkpoint.
+        </p>
+        <h3 className="mt-6 text-[15px] font-medium text-ink">{deployerPct} · The deployer</h3>
+        <p className="mt-2">
+          Launching a coin and building its community deserves a share. pump.fun pays it to the deployer&apos;s wallet directly; it never passes
+          through VYRAL, so VYRAL can neither hold nor delay it.
+        </p>
+        <h3 className="mt-6 text-[15px] font-medium text-ink">{buybackPct} · $VYRAL buyback &amp; burn</h3>
+        <p className="mt-2">
+          Every coin on the platform supports $VYRAL, the platform&apos;s own coin. This share buys $VYRAL on the open market and every token bought is
+          burned, permanently reducing the supply. Purchases run automatically in small steps, so a single buy never moves the price much, and every
+          buy and burn is published with its transaction on the <A href="/burns">Buyback &amp; burn</A> page.
+        </p>
+        <h3 className="mt-6 text-[15px] font-medium text-ink">{treasuryPct} · The treasury</h3>
+        <p className="mt-2">
+          Keeps VYRAL running: infrastructure, verification of video metrics, payouts, security and new features. The buyback and treasury shares
+          arrive in one VYRAL platform wallet; a third of every deposit is forwarded to the treasury and the rest goes to the buyback, all on-chain.
+        </p>
+        <ul className="mt-6 flex list-disc flex-col gap-2 pl-5 marker:text-ink-4">
+          <li>
+            <span className="text-ink">Only real fees.</span> Rewards come solely from fees that were collected and confirmed on-chain. Nothing is
+            pre-funded and nothing is promised in advance.
+          </li>
+          <li>
+            <span className="text-ink">Verifiable.</span> The split is a public pump.fun account. VYRAL checks it on-chain before a coin&apos;s
+            competition opens, and anyone can check it on a Solana explorer.
+          </li>
+          <li>
+            <span className="text-ink">No promises about price.</span> The buyback spends fees that already exist. $VYRAL is not an investment and
+            gives no claim on VYRAL&apos;s revenue, no ownership and no voting rights.
+          </li>
+        </ul>
+        <p className="mt-4">
+          <A href="/docs/fees">Fees &amp; payouts in detail</A>
+        </p>
+      </Section>
+
+      <Section id="idea" index={2} title="The idea">
         <p>
           A coin lives on the people who talk about it: the videos, the reposts, the conversation. VYRAL exists to make coins go viral, which is where the
           name comes from. Every coin launched here opens its own video competition, and {vaultPct} of the creator fees it earns from trading are paid
@@ -133,7 +202,7 @@ async function Content() {
         </div>
       </Section>
 
-      <Section id="launch" index={2} title="Launching a coin">
+      <Section id="launch" index={3} title="Launching a coin">
         <p>
           Anyone with a Solana wallet can launch a coin on pump.fun: name, ticker, image, an optional description and social links. Before signing, the
           launch screen shows exactly how the creator fees are shared. The coin&apos;s competition opens in the same step.
@@ -161,7 +230,7 @@ async function Content() {
         </ul>
       </Section>
 
-      <Section id="creators" index={3} title="Taking part as a creator">
+      <Section id="creators" index={4} title="Taking part as a creator">
         <Steps
           items={[
             {
@@ -195,7 +264,7 @@ async function Content() {
         </p>
       </Section>
 
-      <Section id="score" index={4} title="The Viral Score">
+      <Section id="score" index={5} title="The Viral Score">
         <p className="mb-6">
           One transparent number ranks every video. Views count the most, likes and comments add signal, and engagement only counts up to a plausible
           share of the views, so bought likes cannot outrank real reach.
@@ -206,7 +275,7 @@ async function Content() {
         </div>
       </Section>
 
-      <Section id="multipliers" index={5} title="Platform multipliers">
+      <Section id="multipliers" index={6} title="Platform multipliers">
         <p>
           A like on TikTok is not worth the same as a like on YouTube Shorts: some platforms hand out views, likes and comments far more easily than
           others. Each platform therefore has three separate multipliers, applied before scoring.
@@ -273,7 +342,7 @@ async function Content() {
         </p>
       </Section>
 
-      <Section id="payouts" index={6} title="Getting paid">
+      <Section id="payouts" index={7} title="Getting paid">
         <ul className="flex list-disc flex-col gap-2 pl-5 marker:text-ink-4">
           <li>
             <span className="text-ink">Checkpoints:</span> every {intervals} (as chosen at launch), the highest-ranked eligible video receives the reward
@@ -291,33 +360,6 @@ async function Content() {
             <span className="text-ink">Under review means paused:</span> a video with open review flags cannot win until a person has cleared it.
           </li>
         </ul>
-      </Section>
-
-      <Section id="fees" index={7} title="Where the money comes from">
-        <p>
-          Rewards come only from the creator fees a coin generates when it is traded on pump.fun. When the coin launches, those fees are split four
-          ways, in the launch transaction itself:
-        </p>
-        <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-edge bg-edge sm:grid-cols-4">
-          <Rule value={vaultPct} label="To the coin's competition, through VYRAL's reward vault" />
-          <Rule value={deployerPct} label="To the deployer's wallet, paid directly by pump.fun" />
-          <Rule value={buybackPct} label="Buys $VYRAL on the open market and burns it" />
-          <Rule value={treasuryPct} label="To the VYRAL treasury: operations and development" />
-        </div>
-        <p className="mt-5">
-          The split is locked on-chain: once the coin is live, neither the deployer nor VYRAL can change it, and VYRAL never holds the deployer&apos;s
-          share. Everything that reaches the vault for a coin funds that coin&apos;s competition: at each checkpoint, the top eligible video receives
-          everything collected since the last payout. If no video is eligible, the fees roll over to the next checkpoint.
-        </p>
-        <p className="mt-3">
-          The buyback and treasury shares go to one VYRAL platform wallet. A third of what arrives there goes to the treasury; the rest buys $VYRAL in
-          small steps and every token bought is burned. Every buy and burn is public on the <A href="/burns">Buyback &amp; burn</A> page. The buyback
-          is a mechanism, not a promise about price, and $VYRAL gives no claim on VYRAL&apos;s revenue.
-        </p>
-        <p className="mt-3">
-          Only fees that were actually collected and confirmed on-chain are used. Pending fees are never paid out, nothing is pre-funded, and nothing is
-          promised in advance. <A href="/docs/fees">Fees &amp; payouts</A>
-        </p>
       </Section>
 
       <Section id="fair-play" index={8} title="Fair play">

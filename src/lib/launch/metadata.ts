@@ -5,7 +5,8 @@
  * coin shows up (launchpads, wallets, explorers) people can find its
  * competition: as the metadata's external_url, as `extensions.vyral`, and as
  * the last line of the description, which most apps display. The deployer's
- * own website stays available as `extensions.website`.
+ * links go into the top-level fields pump.fun reads (website, twitter,
+ * telegram) and into `extensions` for apps that read that format.
  */
 
 /** The coin's page on VYRAL (its competition). */
@@ -39,6 +40,11 @@ export function buildTokenMetadata(p: TokenMetadataInput) {
     symbol: p.symbol,
     description,
     image: p.imageUrl,
+    // pump.fun (and apps that follow its format) read the social links from these top-level fields.
+    showName: true,
+    website: p.links.website ?? p.vyralUrl,
+    ...(p.links.x ? { twitter: p.links.x } : {}),
+    ...(p.links.telegram ? { telegram: p.links.telegram } : {}),
     external_url: p.vyralUrl,
     extensions: {
       vyral: p.vyralUrl,
