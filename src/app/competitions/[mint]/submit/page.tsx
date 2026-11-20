@@ -9,6 +9,7 @@ import { Container, KV, Panel, Skeleton } from "@/components/ui/misc";
 import { TokenAvatar } from "@/components/ui/token-avatar";
 import { getConfig } from "@/lib/config/store";
 import { bpsToPct, dateTimeUtc, fullNumber, sol } from "@/lib/format";
+import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
 import { getCompetitionSummaryByMint } from "@/lib/queries/public";
 
 export const metadata: Metadata = { title: "Submit a video" };
@@ -87,7 +88,7 @@ async function SubmitContent({ params }: Pick<PageProps<"/competitions/[mint]/su
           <Panel title="Current round">
             <div className="divide-y divide-edge px-5">
               <KV label="Reward pool (est.)">{sol(c.estimatedRewardLamports)}</KV>
-              <KV label="Reward share">{bpsToPct(c.currentRewardBps)}</KV>
+              <KV label="Reward share">{bpsToPct(CREATOR_FEE_SPLIT.vaultBps)} of creator fees</KV>
               <KV label="Payout interval">Every {c.payoutIntervalHours}h</KV>
               <KV label="Entries">{fullNumber(c.videoCount)}</KV>
             </div>

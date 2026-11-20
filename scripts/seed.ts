@@ -33,12 +33,19 @@ async function main() {
   const { allocateFees, selectWinner, eligibilityOf, rankEntries } = await import("@/lib/rewards/allocation");
   const { rewardBpsForMarketCap } = await import("@/lib/rewards/curve");
   const { prng } = await import("@/lib/sim/random");
-  const { simCandle, simMarketCap, simPrice, simSolUsd, simVolume24h, simVolumeRate, SIM_CREATOR_FEE_RATE, SIM_TOTAL_SUPPLY } =
+  const { simCandle, simMarketCap, simPrice, simSolUsd, simVolume24h, simVolumeRate, SIM_VAULT_FEE_RATE, SIM_TOTAL_SUPPLY } =
     await import("@/lib/sim/market-sim");
   const { simFingerprint, simHandle, simMetrics, simParams } = await import("@/lib/sim/social-sim");
   const { makeEmbeddedId } = await import("@/lib/providers/social/url");
   const { simulatedAccountId } = await import("@/lib/providers/social/mock");
 
+  // Never mix demo data into a live deployment.
+  const { isDemoMode } = await import("@/lib/env");
+  if (!isDemoMode) {
+    console.log("Live providers are configured; demo data is never seeded in production.");
+    await pool.end();
+    return;
+  }
   const [{ n: existing }] = (await db.execute(sql`SELECT count(*)::int AS n FROM tokens`)).rows as Array<{ n: number }>;
   if (Number(existing) > 0) {
     if (process.argv.includes("--if-empty")) {
@@ -243,7 +250,7 @@ async function main() {
     for (let h = t.launchedAt.getTime(); h + HOUR <= nowMs - 5 * 60_000; h += HOUR) {
       let usd = 0;
       for (let m = 0; m < 60; m += 5) usd += (simVolumeRate(t.mint, t.launchedAt, new Date(h + m * 60_000 + 150_000)) * 5) / 60;
-      const lamports = Math.floor(((usd * SIM_CREATOR_FEE_RATE) / simSolUsd(new Date(h))) * 1e9);
+      const lamports = Math.floor(((usd * SIM_VAULT_FEE_RATE) / simSolUsd(new Date(h))) * 1e9);
       if (lamports < 10_000) continue;
       const observed = new Date(h + HOUR);
       rows.push({

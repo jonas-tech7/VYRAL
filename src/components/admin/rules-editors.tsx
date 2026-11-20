@@ -26,7 +26,7 @@ export function RewardCurveEditor({ initial, version }: { initial: RewardCurveCo
       initial={initial}
       version={version}
       title="Reward curve"
-      description="Share of newly confirmed creator fees paid to the winner, by reference market cap. New launches use the latest version."
+      description="Share of the fees a coin sends to the reward vault (its locked half of the creator fees) that the winner is paid, by reference market cap. Default: 100% at every market cap, which needs no price data. New launches use the latest version."
       clientError={(c) => {
         for (let i = 1; i < c.points.length; i++) if (!(c.points[i].marketCapUsd > c.points[i - 1].marketCapUsd)) return "Market caps must increase from row to row.";
         if (c.points.some((p) => !(p.rewardBps >= 0 && p.rewardBps <= 10_000))) return "Shares must be between 0% and 100%.";

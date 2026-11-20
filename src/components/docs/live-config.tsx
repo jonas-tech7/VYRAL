@@ -1,8 +1,8 @@
 import { connection } from "next/server";
-import { CurveChart } from "@/components/charts/curve-chart";
 import { getAllConfig } from "@/lib/config/store";
 import { PLATFORM_LABEL, PLATFORMS } from "@/lib/domain/platforms";
-import { bpsToPct, compactNumber, dateTimeUtc, fullNumber, sol, usd } from "@/lib/format";
+import { bpsToPct, compactNumber, dateTimeUtc, fullNumber, sol } from "@/lib/format";
+import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
 
 /** Live protocol parameters rendered into the docs, so documentation never drifts from configuration. */
 
@@ -162,35 +162,45 @@ export async function LivePayouts() {
   );
 }
 
-export async function LiveCurve() {
-  await connection();
-  const { reward_curve } = await getAllConfig();
-  const c = reward_curve.value;
+/**
+ * The creator-fee split every coin launches with. It is written into each
+ * coin's launch transaction and locked on-chain, so unlike the parameters
+ * above it has no live configuration version.
+ */
+export function FeeSplit() {
+  const rows = [
+    { bps: CREATOR_FEE_SPLIT.vaultBps, dot: "bg-accent", to: "VYRAL's reward vault, for the coin's competition" },
+    { bps: CREATOR_FEE_SPLIT.deployerBps, dot: "bg-ink-3", to: "The deployer's wallet" },
+  ];
   return (
     <div>
-      <div className="not-prose my-4 rounded-lg border border-edge p-4">
-        <CurveChart curve={c} height={200} />
+      <div className="my-4 flex h-2.5 overflow-hidden rounded-full bg-overlay-2" aria-hidden>
+        {rows.map((r) => (
+          <div key={r.dot} className={`h-full ${r.dot}`} style={{ width: `${r.bps / 100}%` }} />
+        ))}
       </div>
       <table>
         <thead>
           <tr>
-            <th>Reference market cap</th>
-            <th>Share of new confirmed fees to the winner</th>
+            <th>Share of creator fees</th>
+            <th>Paid by pump.fun to</th>
           </tr>
         </thead>
         <tbody>
-          {c.points.map((pt) => (
-            <tr key={pt.marketCapUsd}>
-              <td>{usd(pt.marketCapUsd, { compact: true })}</td>
-              <td>{bpsToPct(pt.rewardBps)}</td>
+          {rows.map((r) => (
+            <tr key={r.dot}>
+              <td>
+                <span className="inline-flex items-center gap-2 text-ink">
+                  <span className={`size-2 rounded-full ${r.dot}`} aria-hidden />
+                  {bpsToPct(r.bps)}
+                </span>
+              </td>
+              <td>{r.to}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p>
-        Interpolation: <strong>{c.interpolation}</strong>. Below the first point the first share applies; above the last point, the last share applies.
-      </p>
-      <Caption version={reward_curve.version} updatedAt={reward_curve.updatedAt} />
+      <p className="!mt-2 text-[12px] text-ink-4">Set in each coin&apos;s launch transaction and locked on-chain</p>
     </div>
   );
 }

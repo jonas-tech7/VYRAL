@@ -7,7 +7,8 @@ import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { ApiError } from "@/lib/api/errors";
-import { getAllConfig } from "@/lib/config/store";
+import { hasRole, type Viewer } from "@/lib/auth/session";
+import { getAllConfig, updateConfig } from "@/lib/config/store";
 import { db, schema } from "@/lib/db";
 import { env } from "@/lib/env";
 import { buildTokenMetadata, coinPageUrl, launchLinkUrl } from "@/lib/launch/metadata";
@@ -58,10 +59,14 @@ export const launchInputSchema = z.object({
   initialBuySol: z.number().min(0).max(50).default(0),
   /** Version of the Terms of Use the deployer accepted; stored with the launch request. */
   termsVersion: z.literal(TERMS_VERSION, { error: "Accept the current Terms of Use to launch." }),
+  /** Admin only: register this launch as the official $VYRAL coin (header contract address). */
+  official: z.boolean().optional(),
 });
 export type LaunchInput = z.infer<typeof launchInputSchema>;
 
-export async function prepareLaunch(wallet: string, input: LaunchInput) {
+export async function prepareLaunch(wallet: string, input: LaunchInput, viewer?: Viewer | null) {
+  if (input.official && !hasRole(viewer ?? null, "admin")) throw new ApiError(403, "forbidden", "Only administrators can launch the official coin.");
+  if (input.official && launchProvider().isSimulated) throw new ApiError(400, "simulated", "The official coin can only be launched on-chain, not in the demonstration environment.");
   const configs = await getAllConfig();
   if (!configs.payouts.value.allowedIntervalsHours.includes(input.payoutIntervalHours)) {
     throw new ApiError(400, "invalid_request", "Choose one of the allowed payout intervals.");
@@ -119,12 +124,13 @@ export async function prepareLaunch(wallet: string, input: LaunchInput) {
     mode: prepared.mode,
     message: prepared.intentMessage,
     transaction: prepared.transaction,
+    followUp: prepared.followUp ?? [],
     expiresAt: prepared.expiresAt.toISOString(),
     simulated: provider.isSimulated,
   };
 }
 
-export async function confirmLaunch(wallet: string, launchId: string, signature: string) {
+export async function confirmLaunch(wallet: string, launchId: string, signature: string, viewer?: Viewer | null) {
   const [req] = await db.select().from(schema.launchRequests).where(eq(schema.launchRequests.id, launchId));
   if (!req || req.deployerWallet !== wallet) throw new ApiError(404, "not_found", "Launch request not found.");
   if (req.status === "confirmed") return { mint: req.mint, alreadyConfirmed: true };
@@ -147,7 +153,7 @@ export async function confirmLaunch(wallet: string, launchId: string, signature:
   const configs = await getAllConfig();
   const now = new Date();
 
-  return db.transaction(async (tx) => {
+  const launched = await db.transaction(async (tx) => {
     const locked = await tx.execute<{ status: string }>(sql`SELECT status FROM launch_requests WHERE id = ${launchId} FOR UPDATE`);
     if (locked.rows[0]?.status === "confirmed") return { mint: req.mint, alreadyConfirmed: true };
 
@@ -219,4 +225,15 @@ export async function confirmLaunch(wallet: string, launchId: string, signature:
     });
     return { mint: req.mint, alreadyConfirmed: false };
   });
+
+  // The official $VYRAL coin: its address goes into the site header straight away (admins only, real launches only; both re-checked here).
+  if (!launched.alreadyConfirmed && payload.official && !provider.isSimulated && hasRole(viewer ?? null, "admin")) {
+    await updateConfig(
+      "platform_token",
+      { mint: req.mint, symbol: payload.symbol },
+      { wallet, role: viewer?.role ?? null },
+      `Official ${payload.symbol} coin launched through VYRAL`,
+    );
+  }
+  return launched;
 }

@@ -2,7 +2,7 @@ import { Countdown } from "@/components/ui/client";
 import { DemoTag } from "@/components/ui/badge";
 import { EmptyRow, RowLink, Table, TD, TH, THead, TR } from "@/components/ui/table";
 import type { CompetitionListItem } from "@/lib/queries/public";
-import { age, bpsToPct, compactNumber, score, sol, usd } from "@/lib/format";
+import { age, compactNumber, score, sol, usd } from "@/lib/format";
 import { CompetitionStatus } from "./status";
 import { TokenCell } from "./token-cell";
 
@@ -19,7 +19,7 @@ export function CompetitionsTable({ items, variant = "full", now }: { items: Com
         {variant === "home" ? <TH align="right">24h volume</TH> : null}
         <TH align="right">Video views</TH>
         {variant === "full" ? <TH align="right">Creators</TH> : null}
-        <TH align="right" title="Estimated reward at the next checkpoint: unallocated confirmed fees × current reward share">
+        <TH align="right" title="Estimated reward at the next checkpoint: the coin's unallocated confirmed vault fees">
           Reward pool
         </TH>
         <TH align="right">Top Viral Score</TH>
@@ -61,9 +61,8 @@ export function CompetitionsTable({ items, variant = "full", now }: { items: Com
                 {c.creatorCount}
               </TD>
             ) : null}
-            <TD align="right" numeric>
-              <span className="text-ink">{sol(c.estimatedRewardLamports)}</span>
-              <span className="block text-[11.5px] text-ink-3">{bpsToPct(c.currentRewardBps)} share</span>
+            <TD align="right" numeric className="text-ink">
+              {sol(c.estimatedRewardLamports)}
             </TD>
             <TD align="right" numeric className="text-ink">
               {score(c.topScore)}

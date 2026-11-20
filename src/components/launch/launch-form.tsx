@@ -4,9 +4,8 @@ import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { Transaction, VersionedTransaction } from "@solana/web3.js";
 import { ImageUp } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { CurveChart } from "@/components/charts/curve-chart";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/form";
 import { Notice } from "@/components/ui/misc";
@@ -14,18 +13,18 @@ import { TokenAvatar } from "@/components/ui/token-avatar";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/components/wallet/auth-provider";
 import { api, ApiClientError } from "@/lib/client/api";
-import type { RewardCurveConfig } from "@/lib/config/schemas";
-import { bpsToPct, cn, fullNumber, usd } from "@/lib/format";
+import { bpsToPct, cn, fullNumber } from "@/lib/format";
+import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
 import { TERMS_VERSION } from "@/lib/legal";
 
 export type LaunchConfig = {
   allowedIntervalsHours: number[];
   defaultIntervalHours: number;
   minVerifiedViews: number;
-  rewardCurve: RewardCurveConfig;
-  rewardCurveVersion: number;
   simulated: boolean;
   supply: number;
+  /** Admins may mark a launch as the official $VYRAL coin (shown in the site header). */
+  canSetOfficial: boolean;
 };
 
 type Prepared = {
@@ -34,6 +33,7 @@ type Prepared = {
   mode: "message" | "transaction";
   message: string | null;
   transaction: string | null;
+  followUp: string[];
   simulated: boolean;
 };
 
@@ -66,7 +66,8 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
   const router = useRouter();
   const toast = useToast();
   const { ensureSignedIn, signText, wallet } = useAuth();
-  const { sendTransaction } = useWallet();
+  const { sendTransaction, signAllTransactions } = useWallet();
+  const [official, setOfficial] = useState(false);
   const { connection } = useConnection();
 
   const [name, setName] = useState("");
@@ -95,8 +96,6 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
   );
 
   const ticker = symbol.replace(/^\$/, "").toUpperCase();
-  const lowCap = config.rewardCurve.points[0];
-  const highCap = config.rewardCurve.points[config.rewardCurve.points.length - 1];
 
   function pickFile(f: File | undefined | null) {
     if (!f) return;
@@ -155,6 +154,7 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
           payoutIntervalHours: interval,
           initialBuySol: config.simulated ? 0 : Number(initialBuy || 0),
           termsVersion: TERMS_VERSION,
+          ...(config.canSetOfficial && official ? { official: true } : {}),
         },
       });
 
@@ -163,14 +163,38 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
       if (prepared.mode === "message" && prepared.message) {
         signature = await signText(prepared.message);
       } else if (prepared.transaction) {
-        const bytes = Uint8Array.from(atob(prepared.transaction), (c) => c.charCodeAt(0));
-        let tx: Transaction | VersionedTransaction;
-        try {
-          tx = VersionedTransaction.deserialize(bytes);
-        } catch {
-          tx = Transaction.from(bytes);
+        const decode = (b64: string): Transaction | VersionedTransaction => {
+          const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+          try {
+            return VersionedTransaction.deserialize(bytes);
+          } catch {
+            return Transaction.from(bytes);
+          }
+        };
+        const tx = decode(prepared.transaction);
+        const followUp = prepared.followUp.map(decode);
+        if (followUp.length && signAllTransactions) {
+          // One wallet prompt: the launch first, then the initial buy once the coin exists.
+          const [signedLaunch, ...signedRest] = await signAllTransactions([tx, ...followUp]);
+          signature = await connection.sendRawTransaction(signedLaunch.serialize());
+          const latest = await connection.getLatestBlockhash("confirmed");
+          await connection.confirmTransaction({ signature, ...latest }, "confirmed");
+          for (const t of signedRest) {
+            try {
+              await connection.sendRawTransaction(t.serialize());
+            } catch {
+              toast.push({ tone: "neutral", title: "Initial buy not sent", description: "Your coin is live; you can buy it on its token page." });
+            }
+          }
+        } else {
+          signature = await sendTransaction(tx, connection);
+          for (const t of followUp) {
+            await connection.confirmTransaction(signature, "confirmed");
+            await sendTransaction(t, connection).catch(() =>
+              toast.push({ tone: "neutral", title: "Initial buy not sent", description: "Your coin is live; you can buy it on its token page." }),
+            );
+          }
         }
-        signature = await sendTransaction(tx, connection);
       } else {
         throw new Error("Launch could not be prepared.");
       }
@@ -203,7 +227,6 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
   }
 
   const busy = step !== "idle";
-  const curvePoints = useMemo(() => config.rewardCurve.points, [config.rewardCurve]);
 
   return (
     <div className="grid gap-10 lg:grid-cols-[1fr_380px] lg:gap-14">
@@ -332,7 +355,7 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
               label="Initial buy"
               htmlFor="initial-buy"
               optional
-              hint={config.simulated ? "Disabled in the demonstration environment." : "Purchased in the launch transaction, in SOL."}
+              hint={config.simulated ? "Disabled in the demonstration environment." : "Bought for you right after the coin is created, in SOL."}
             >
               <Input
                 id="initial-buy"
@@ -369,29 +392,33 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
           </div>
 
           <div className="px-5 py-4">
-            <h3 className="text-[13px] font-medium text-ink">Fee sharing</h3>
+            <h3 className="text-[13px] font-medium text-ink">Creator fee split</h3>
             <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-2">
-              At every checkpoint, a share of this token&apos;s newly confirmed creator fees pays the top eligible video. The share depends on market cap; the
-              remainder is retained by you as deployer.
+              Your coin launches on pump.fun. Its creator fees are split in the launch transaction and the split is locked on-chain: nobody, not you and not
+              VYRAL, can change it afterwards.
             </p>
-            <div className="mt-3">
-              <CurveChart curve={config.rewardCurve} height={150} />
+            <div className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-overlay-2" aria-hidden>
+              <div className="h-full bg-accent" style={{ width: `${CREATOR_FEE_SPLIT.vaultBps / 100}%` }} />
+              <div className="h-full bg-ink-3" style={{ width: `${CREATOR_FEE_SPLIT.deployerBps / 100}%` }} />
             </div>
-            <dl className="mt-2 divide-y divide-edge text-[12.5px]">
-              {curvePoints.map((p) => (
-                <div key={p.marketCapUsd} className="flex justify-between py-1.5">
-                  <dt className="text-ink-3">At {usd(p.marketCapUsd, { compact: true })} market cap</dt>
-                  <dd className="num text-ink">{bpsToPct(p.rewardBps)} to rewards</dd>
-                </div>
-              ))}
+            <dl className="mt-3 divide-y divide-edge text-[12.5px]">
               <div className="flex justify-between py-1.5">
-                <dt className="text-ink-3">Between points</dt>
-                <dd className="text-ink">{config.rewardCurve.interpolation === "step" ? "Stepped" : "Interpolated"}</dd>
+                <dt className="flex items-center gap-2 text-ink-2">
+                  <span className="size-2 rounded-full bg-accent" aria-hidden />
+                  Competition rewards
+                </dt>
+                <dd className="num text-ink">{bpsToPct(CREATOR_FEE_SPLIT.vaultBps)}</dd>
+              </div>
+              <div className="flex justify-between py-1.5">
+                <dt className="flex items-center gap-2 text-ink-2">
+                  <span className="size-2 rounded-full bg-ink-3" aria-hidden />
+                  You, the deployer
+                </dt>
+                <dd className="num text-ink">{bpsToPct(CREATOR_FEE_SPLIT.deployerBps)}</dd>
               </div>
             </dl>
             <p className="mt-2 text-[12px] leading-relaxed text-ink-3">
-              Below {usd(lowCap.marketCapUsd, { compact: true })}: {bpsToPct(lowCap.rewardBps)}. Above {usd(highCap.marketCapUsd, { compact: true })}:{" "}
-              {bpsToPct(highCap.rewardBps)}. Only collected, confirmed fees are used. Configuration v{config.rewardCurveVersion}, set by protocol administrators.
+              Your share is paid to your wallet by pump.fun directly. The competition share is paid out to the top eligible video at every checkpoint.
             </p>
           </div>
 
@@ -422,9 +449,18 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
           </dl>
 
           <div className="border-t border-edge p-5">
+            {config.canSetOfficial ? (
+              <label className="mb-3 flex cursor-pointer items-start gap-2.5 rounded-md border border-accent/30 bg-accent/5 p-3 text-[12.5px] leading-relaxed text-ink-2">
+                <input type="checkbox" checked={official} onChange={(e) => setOfficial(e.target.checked)} className="mt-0.5 accent-[#2cf59e]" />
+                <span>
+                  <span className="font-medium text-ink">This is the official $VYRAL coin.</span> Its contract address appears in the site header as soon as
+                  the launch is confirmed. Admins only.
+                </span>
+              </label>
+            ) : null}
             <label className="flex cursor-pointer items-start gap-2.5 text-[12.5px] leading-relaxed text-ink-2">
               <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5 accent-[#2cf59e]" />
-              I reviewed the fee-sharing configuration and understand that competition payouts are funded from this token&apos;s creator fees.
+              I reviewed the fee split and understand that half of this coin&apos;s creator fees fund its competition, locked on-chain at launch.
             </label>
             {errors.ack ? (
               <p className="mt-2 text-[12.5px] text-negative" role="alert">

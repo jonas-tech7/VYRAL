@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
-import { LiveCurve, LiveEligibility, LiveFraud, LiveMultipliers, LivePayouts, LiveScoring } from "@/components/docs/live-config";
+import { FeeSplit, LiveEligibility, LiveFraud, LiveMultipliers, LivePayouts, LiveScoring } from "@/components/docs/live-config";
+import { bpsToPct } from "@/lib/format";
+import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
 
 export type DocPage = { slug: string; title: string; description: string; body: () => ReactNode };
+
+const VAULT_PCT = bpsToPct(CREATOR_FEE_SPLIT.vaultBps);
+const DEPLOYER_PCT = bpsToPct(CREATOR_FEE_SPLIT.deployerBps);
 
 function Live({ children }: { children: ReactNode }) {
   return <Suspense fallback={<p className="text-[13px] text-ink-4">Loading live configuration…</p>}>{children}</Suspense>;
@@ -19,9 +24,9 @@ const overview: DocPage = {
         make coins go viral &mdash; that is where the name comes from.
       </p>
       <p>
-        VYRAL is a token launchpad on Solana where every launch opens its own video competition. A share of the creator fees each token earns from
-        trading is used to pay the creators and influencers who promote it best. Every 3 or 6 hours, the top-ranked eligible video is paid, ranked by a
-        transparent score and settled as a Solana transaction anyone can verify.
+        VYRAL is a token launchpad on Solana where every launch opens its own video competition. Coins launch on pump.fun, and {VAULT_PCT} of the
+        creator fees each coin earns from trading are used to pay the creators and influencers who promote it best. Every 3 or 6 hours, the top-ranked
+        eligible video is paid, ranked by a transparent score and settled as a Solana transaction anyone can verify.
       </p>
       <p>
         The incentives point the same way. Creators are paid for the reach they actually generate, and the coin gains the attention it needs to be
@@ -30,8 +35,9 @@ const overview: DocPage = {
       <h2 id="loop">The loop</h2>
       <ol>
         <li>
-          <strong>Launch.</strong> A deployer launches a token. Its competition opens in the same transaction that records the token, with the
-          fee-sharing configuration shown before signing.
+          <strong>Launch.</strong> A deployer launches a coin on pump.fun. The launch transaction splits the coin&apos;s creator fees, {VAULT_PCT} to
+          its competition and {DEPLOYER_PCT} to the deployer, and locks the split on-chain. VYRAL verifies the launch and opens the competition in the
+          same step that records the coin.
         </li>
         <li>
           <strong>Create.</strong> Creators publish videos on TikTok, YouTube Shorts, Instagram Reels or X after the launch and submit the links.
@@ -42,15 +48,16 @@ const overview: DocPage = {
           comparably across platforms; an <Link href="/docs/anti-fraud">anti-fraud system</Link> routes suspicious entries to human review.
         </li>
         <li>
-          <strong>Get paid.</strong> Every 3 or 6 hours a <Link href="/docs/payouts">checkpoint</Link> pays the top eligible creator from confirmed
-          fees. Each payout is a Solana transaction anyone can verify.
+          <strong>Get paid.</strong> Every 3 or 6 hours a <Link href="/docs/payouts">checkpoint</Link> pays the top eligible creator the coin&apos;s
+          confirmed fees in the reward vault. Each payout is a Solana transaction anyone can verify.
         </li>
       </ol>
       <h2 id="principles">Principles</h2>
       <ul>
         <li>Competitions are continuous. There are no fixed 24-hour rounds; a token&apos;s competition runs for as long as it is active.</li>
         <li>Only fees that were actually collected and confirmed on-chain fund rewards. Unallocated fees stay accounted for and roll forward.</li>
-        <li>Every parameter that affects money — scoring weights, platform multipliers, the reward curve, thresholds — is versioned, visible and audit-logged.</li>
+        <li>The creator-fee split is locked on-chain at launch. Neither the deployer nor VYRAL can change it, and VYRAL never holds the deployer&apos;s share.</li>
+        <li>Every parameter that affects money — scoring weights, platform multipliers, thresholds — is versioned, visible and audit-logged.</li>
         <li>Automated systems flag; people decide. No creator is rejected on a single suspicious metric.</li>
         <li>VYRAL never asks for a seed phrase or private key. Wallets sign messages and transactions locally.</li>
       </ul>
@@ -69,7 +76,7 @@ const launching: DocPage = {
   description: "What a deployer configures, what is fixed, and how the launch is signed.",
   body: () => (
     <>
-      <p>Launching takes a few minutes and requires a connected Solana wallet. You provide:</p>
+      <p>Every coin launches on pump.fun. Launching takes a few minutes and requires a connected Solana wallet. You provide:</p>
       <ul>
         <li>Name (2–32 characters) and ticker (2–10 letters or digits)</li>
         <li>An image (PNG, JPG, WebP or GIF up to 4 MB, re-encoded to a 512×512 WebP with metadata removed)</li>
@@ -79,19 +86,28 @@ const launching: DocPage = {
       </ul>
       <h2 id="fixed">Fixed parameters</h2>
       <p>
-        Supply (1,000,000,000) and decimals (6) are set by the launch program, and mint authority is revoked at launch. The reward curve and eligibility
-        rules in force at launch are copied into the competition; administrators can update them later, and every change is logged.
+        Supply (1,000,000,000) and decimals (6) are set by the launch program, and mint authority is revoked at launch. The creator-fee split is fixed
+        as well: {VAULT_PCT} to the coin&apos;s competition and {DEPLOYER_PCT} to you, locked on-chain in the launch transaction (see{" "}
+        <Link href="/docs/fees">Fees &amp; payouts</Link>). The eligibility rules in force at launch are copied into the competition; administrators can
+        update them later, and every change is logged.
       </p>
       <h2 id="signing">Signing</h2>
       <p>
-        The server prepares the launch; your wallet signs it. In production the launch infrastructure returns a transaction that creates the token and
-        its bonding-curve pool; VYRAL verifies the confirmed transaction (that it succeeded, that you signed it, and that it created the prepared mint)
-        before recording the token. In the demonstration environment you sign a launch-intent message instead, and no token is created on-chain.
+        The server prepares the launch transaction and signs it for the new mint; your wallet signs and sends it. The transaction creates the coin on
+        pump.fun, makes pump.fun&apos;s fee-sharing configuration the coin&apos;s creator, sets the two shares ({VAULT_PCT} to VYRAL&apos;s reward vault,{" "}
+        {DEPLOYER_PCT} to your wallet) and revokes the configuration&apos;s admin. Because the mint&apos;s signature covers the whole transaction, the
+        split cannot be removed or altered without invalidating it.
+      </p>
+      <p>
+        Before recording the token, VYRAL verifies the confirmed transaction on-chain: that it succeeded, that you signed it, that it created the
+        prepared mint, and that the coin&apos;s creator fees are routed through the fee split with the expected shares and a revoked admin. In the
+        demonstration environment you sign a launch-intent message instead, and no token is created on-chain.
       </p>
       <h2 id="after">After launch</h2>
       <p>
-        You land on the token&apos;s competition page. Videos published from that moment on are eligible. As deployer you keep the share of creator fees
-        that is not allocated to rewards; by default your own videos cannot win your token&apos;s competition.
+        You land on the token&apos;s competition page. Videos published from that moment on are eligible. As deployer you receive {DEPLOYER_PCT} of the
+        coin&apos;s creator fees, paid to your wallet by pump.fun each time the fees are distributed; VYRAL never holds them. By default your own videos
+        cannot win your token&apos;s competition.
       </p>
       <h2 id="linked">Linked to its VYRAL page</h2>
       <p>
@@ -416,7 +432,7 @@ const antiFraud: DocPage = {
 const payouts: DocPage = {
   slug: "payouts",
   title: "Payouts",
-  description: "Checkpoints, reference market cap, transaction safety and fallbacks.",
+  description: "Checkpoints, allocation, transaction safety and fallbacks.",
   body: () => (
     <>
       <h2 id="checkpoint">At every checkpoint</h2>
@@ -424,8 +440,8 @@ const payouts: DocPage = {
         <li>Retrieve the latest verified video statistics.</li>
         <li>Calculate current Viral Scores.</li>
         <li>Identify the highest-ranking eligible video.</li>
-        <li>Determine the reward share from the reference market cap and the competition&apos;s reward curve.</li>
-        <li>Calculate the reward from fees that are collected, confirmed and not yet allocated.</li>
+        <li>Compute the reference market cap, which is recorded with the checkpoint.</li>
+        <li>Allocate the coin&apos;s fees in the reward vault that are collected, confirmed and not yet allocated: all of them go to the winner.</li>
         <li>Send the reward to the winning creator&apos;s wallet.</li>
         <li>Record the transaction publicly on the competition page.</li>
       </ol>
@@ -436,21 +452,26 @@ const payouts: DocPage = {
       <h2 id="reference">Reference market cap</h2>
       <p>
         <code>reference market cap = TWAP(price, window) × on-chain supply</code>. Prices are sampled every minute from an aggregator of on-chain
-        liquidity; supply is read from the token mint. Each observation is weighted by how long it was the latest price, so a last-second spike cannot
-        move the reward share. If there are too few observations or the latest is stale, the checkpoint is skipped and fees roll over.
+        liquidity; supply is read from the token mint, and each observation is weighted by how long it was the latest price. The reference market cap
+        does not change the reward: it is recorded with every checkpoint and shown in the competition&apos;s checkpoint log. If there are too few
+        observations or the latest is stale, the checkpoint is skipped and fees roll over.
       </p>
       <Live>
         <LivePayouts />
       </Live>
       <h2 id="allocation">Allocation</h2>
       <pre>
-        <code>{`reward   = floor(fees_in_window × share_bps / 10,000)   // integer lamports
-retained = fees_in_window − reward                       // deployer share`}</code>
+        <code>{`fees_in_window = Σ confirmed vault fees of the coin, not yet allocated   // integer lamports
+reward         = fees_in_window                                          // 100% to the winner`}</code>
       </pre>
-      <p>Fees roll forward untouched when there are no new confirmed fees, no eligible video, no reliable price, or the reward is below the minimum.</p>
+      <p>
+        <code>fees_in_window</code> includes fees that rolled over from earlier checkpoints. Only the competition&apos;s share of a coin&apos;s creator
+        fees ever reaches the reward vault; pump.fun pays the deployer&apos;s share directly, so nothing is deducted or retained at a checkpoint.
+      </p>
+      <p>Fees roll forward untouched when there are no new confirmed fees, no eligible video, or the reward is below the minimum. Missing price data never holds a payout back: the market cap is recorded when available but does not change the reward.</p>
       <h2 id="transactions">Transaction safety</h2>
       <ul>
-        <li>Each attempt is a fully signed transfer from the fee vault with a memo <code>VYRAL payout &lt;id&gt;</code>. Its signature is stored before broadcast.</li>
+        <li>Each attempt is a fully signed transfer from the reward vault with a memo <code>VYRAL payout &lt;id&gt;</code>. Its signature is stored before broadcast.</li>
         <li>At most one attempt can be in flight per payout — enforced by a database constraint.</li>
         <li>A new attempt is built only after the previous one is provably final: confirmed, failed on-chain, or its blockhash expired without the signature landing (an expired transaction can never land).</li>
         <li>A payout is shown as paid only once its transaction is finalized.</li>
@@ -464,8 +485,8 @@ retained = fees_in_window − reward                       // deployer share`}</
       </p>
       <h2 id="verify">Verifying a payout yourself</h2>
       <p>
-        Open the transaction signature from a competition&apos;s payout history in any Solana explorer. The transfer goes from the fee vault to the creator
-        wallet listed, for the amount listed, and carries the payout ID in its memo.
+        Open the transaction signature from a competition&apos;s payout history in any Solana explorer. The transfer goes from the reward vault to the
+        creator wallet listed, for the amount listed, and carries the payout ID in its memo.
       </p>
     </>
   ),
@@ -473,33 +494,49 @@ retained = fees_in_window − reward                       // deployer share`}</
 
 const fees: DocPage = {
   slug: "fees",
-  title: "Fees & reward curve",
-  description: "Where rewards come from and how the share is set.",
+  title: "Fees & payouts",
+  description: "Where rewards come from: the locked fee split, the fee keeper and what each checkpoint pays.",
   body: () => (
     <>
       <p>
-        Trading a token on its launch pool generates <strong>creator fees</strong>. VYRAL collects them into a fee vault. A fee only counts once its
-        transaction is observed <em>and</em> finalized on-chain; pending fees are shown separately and are never paid out.
+        Every coin launched on VYRAL trades on pump.fun, and trading generates <strong>creator fees</strong>. How they are split between the
+        coin&apos;s competition and its deployer is set when the coin launches and cannot be changed afterwards.
       </p>
       <h2 id="split">The split</h2>
+      <FeeSplit />
       <p>
-        At every checkpoint, the confirmed fees collected since the last award are split in two: a <strong>reward share</strong>, paid to the winning
-        creator, and the <strong>remainder</strong>, retained for the token&apos;s deployer. The reward share depends on the token&apos;s reference market cap,
-        following a curve set by protocol administrators.
+        The competition&apos;s {VAULT_PCT} is recorded for the coin and all of it funds that coin&apos;s competition. The deployer&apos;s {DEPLOYER_PCT}{" "}
+        never passes through VYRAL: pump.fun pays it to the deployer&apos;s wallet directly, so VYRAL cannot hold, delay or redirect it.
       </p>
-      <Live>
-        <LiveCurve />
-      </Live>
-      <h2 id="why">Why a curve</h2>
+      <h2 id="locked">Locked on-chain</h2>
       <p>
-        Young, small tokens need attention most and generate the least fees, so a larger share of their fees funds creators. As a token grows, a smaller
-        share still produces meaningful rewards. The values above are configuration, not fixed economics — they are versioned and shown to every
-        deployer before launch.
+        The split is part of the launch transaction. The transaction that creates the coin also makes pump.fun&apos;s fee-sharing configuration the
+        coin&apos;s creator, sets the two shares and revokes the configuration&apos;s admin. With the admin revoked, nobody (not the deployer, not
+        VYRAL) can change the shares. VYRAL verifies all of this on-chain before it opens the coin&apos;s competition, and because the fee-sharing
+        configuration is a public account, anyone can check it.
       </p>
-      <h2 id="changes">Changes</h2>
+      <h2 id="keeper">From pump.fun to the reward vault</h2>
       <p>
-        Each competition stores the curve it launched with. Administrators can update a competition&apos;s curve or apply a new global curve to all
-        competitions; both are audit-logged and visible on the competition page (&ldquo;Rules vN&rdquo;).
+        A coin&apos;s creator fees accrue on pump.fun until they are distributed. Distribution is permissionless: anyone can trigger it, and the
+        locked shares decide where the fees go. VYRAL&apos;s fee keeper triggers it for every coin on a regular schedule, once the accrued fees reach
+        pump.fun&apos;s minimum distributable amount. Each distribution pays the vault&apos;s share into VYRAL&apos;s reward vault and the
+        deployer&apos;s share to the deployer&apos;s wallet, in the same transaction.
+      </p>
+      <p>
+        The amount the reward vault receives in a distribution is recorded as a fee for that coin, together with the transaction signature. It counts
+        once the transaction is finalized; until then it is shown as pending and is never paid out.
+      </p>
+      <h2 id="checkpoints">What a checkpoint pays</h2>
+      <p>
+        At every checkpoint the top eligible video receives 100% of the coin&apos;s unallocated confirmed vault fees: everything recorded for the coin
+        that no earlier checkpoint has allocated, including fees that rolled over. If no video is eligible (see{" "}
+        <Link href="/docs/eligibility">Eligibility</Link>), nothing is paid and the fees roll over to the next checkpoint; the same happens when the
+        amount is below the minimum payout. <Link href="/docs/payouts">Payouts</Link> describes the checkpoint and the transfer in detail.
+      </p>
+      <h2 id="funding">Nothing is pre-funded</h2>
+      <p>
+        Rewards are paid only from fees that were actually collected, and nothing is promised in advance. Fees are accounted per coin, so a coin&apos;s
+        competition is paid only from that coin&apos;s fees: if a coin generates no fees, its competition pays nothing.
       </p>
     </>
   ),
@@ -532,7 +569,7 @@ const security: DocPage = {
         <li>Administrator roles (admin, reviewer); every sensitive action is written to an append-only audit log enforced by the database.</li>
         <li>Linked-account OAuth tokens are encrypted at rest (AES-256-GCM); IP addresses are stored only as keyed hashes.</li>
         <li>Uploaded images are decoded and re-encoded server-side before being stored or served.</li>
-        <li>Payout signing uses a remote signer (KMS or custody service) in production; a local keypair is only permitted on devnet. No signing key is stored in the database.</li>
+        <li>Payouts are signed by a remote signer (KMS or custody service), or by a hot-wallet keypair held in the hosting environment. On mainnet the keypair is refused unless the operator opts in explicitly, it must be the reward vault itself, and each automatic transfer is capped (larger ones need an administrator). No signing key is stored in the database.</li>
       </ul>
     </>
   ),
@@ -584,7 +621,7 @@ const architecture: DocPage = {
               <code>LAUNCH_PROVIDER</code>
             </td>
             <td>Signed launch intent</td>
-            <td>External launch service (bonding-curve pool creation), verified via RPC</td>
+            <td>Launch on pump.fun with the creator-fee split locked in the same transaction, verified via RPC</td>
           </tr>
           <tr>
             <td>
@@ -598,14 +635,14 @@ const architecture: DocPage = {
               <code>FEE_PROVIDER</code>
             </td>
             <td>Simulated fees</td>
-            <td>Fee-vault deposits attributed by memo, confirmed at finality</td>
+            <td>Fee keeper distributes each coin&apos;s pump.fun creator fees; the reward vault&apos;s share is recorded per coin, confirmed at finality</td>
           </tr>
           <tr>
             <td>
               <code>PAYOUT_EXECUTOR</code>
             </td>
             <td>Simulated signatures</td>
-            <td>SOL transfers from the fee vault, signed by a remote signer</td>
+            <td>SOL transfers from the reward vault, signed by a remote signer</td>
           </tr>
           <tr>
             <td>
@@ -624,8 +661,8 @@ const architecture: DocPage = {
             <td>Every minute — TWAP inputs, candles, token market data</td>
           </tr>
           <tr>
-            <td>Fee observation</td>
-            <td>Every minute — new fees (pending) and finality confirmations</td>
+            <td>Fee distribution</td>
+            <td>Every minute — distributes due coins&apos; creator fees, records the vault&apos;s share (pending) and confirms it at finality</td>
           </tr>
           <tr>
             <td>Metric sync</td>

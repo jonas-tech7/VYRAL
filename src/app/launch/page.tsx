@@ -3,6 +3,8 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { LaunchForm } from "@/components/launch/launch-form";
 import { Container, PageHeader, Skeleton } from "@/components/ui/misc";
+import { hasRole } from "@/lib/auth/session";
+import { getViewer } from "@/lib/auth/viewer";
 import { getAllConfig } from "@/lib/config/store";
 import { LAUNCH_SUPPLY, launchProvider } from "@/lib/providers/launch";
 
@@ -16,7 +18,7 @@ export default function LaunchPage() {
     <Container>
       <PageHeader
         title="Launch a coin"
-        description="Every token launched on VYRAL gets its own video competition. Review exactly how creator fees are shared before you sign."
+        description="Every coin launched on VYRAL goes live on pump.fun with its own video competition. Half of its creator fees fund the competition, locked on-chain."
       />
       <Suspense fallback={<Skeleton className="h-[720px] w-full" />}>
         <LaunchContent />
@@ -27,17 +29,16 @@ export default function LaunchPage() {
 
 async function LaunchContent() {
   await connection();
-  const cfg = await getAllConfig();
+  const [cfg, viewer] = await Promise.all([getAllConfig(), getViewer()]);
   return (
     <LaunchForm
       config={{
         allowedIntervalsHours: cfg.payouts.value.allowedIntervalsHours,
         defaultIntervalHours: cfg.payouts.value.defaultIntervalHours,
         minVerifiedViews: cfg.eligibility.value.minVerifiedViews,
-        rewardCurve: cfg.reward_curve.value,
-        rewardCurveVersion: cfg.reward_curve.version,
         simulated: launchProvider().isSimulated,
         supply: LAUNCH_SUPPLY,
+        canSetOfficial: hasRole(viewer, "admin") && !launchProvider().isSimulated,
       }}
     />
   );

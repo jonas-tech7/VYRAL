@@ -2,11 +2,14 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { AccessDenied } from "@/components/admin/admin-ui";
 import { AdminHeader } from "@/components/admin/admin-page";
+import { OfficialTokenForm } from "@/components/admin/official-token-form";
 import { StatusBadge } from "@/components/ui/badge";
 import { Skeleton, SectionHeader } from "@/components/ui/misc";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { Table, TD, TH, THead, TR } from "@/components/ui/table";
 import { requireRole } from "@/lib/auth/admin";
+import { hasRole } from "@/lib/auth/session";
+import { getConfig } from "@/lib/config/store";
 import { isDemoMode } from "@/lib/env";
 import { fullNumber, sol, timeAgo } from "@/lib/format";
 import { getAdminOverview } from "@/lib/queries/admin";
@@ -34,7 +37,7 @@ const JOB_LABEL: Record<string, string> = {
 async function Overview() {
   const auth = await requireRole("reviewer");
   if (!auth.ok) return <AccessDenied signedIn={Boolean(auth.viewer)} />;
-  const o = await getAdminOverview();
+  const [o, official] = await Promise.all([getAdminOverview(), getConfig("platform_token")]);
   const now = new Date();
 
   return (
@@ -52,6 +55,13 @@ async function Overview() {
           <Stat label="Paused competitions" value={<Link href="/admin/competitions" className="hover:text-accent">{fullNumber(o.pausedCompetitions)}</Link>} sub={`${o.activeCompetitions} active`} />
         </StatGrid>
       </section>
+
+      {hasRole(auth.viewer, "admin") ? (
+        <section>
+          <SectionHeader title="Official $VYRAL coin" description="Its contract address appears in the site header for everyone. Set automatically when you launch it with “official coin” checked." />
+          <OfficialTokenForm mint={official.value.mint} symbol={official.value.symbol} />
+        </section>
+      ) : null}
 
       <section>
         <SectionHeader title="Money" description="Fee and payout amounts are confirmed on-chain values unless marked pending." />

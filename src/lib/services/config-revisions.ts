@@ -55,6 +55,20 @@ const X_ESTIMATE: Revision<"scoring"> = {
   note: "Default revision: X uses the Instagram Reels values as an estimate until VYRAL has its own data.",
 };
 
+const FEE_SPLIT_FLAT: Revision<"reward_curve"> = {
+  id: "2026-11-pumpfun-fee-split",
+  key: "reward_curve",
+  appliesTo: (c) =>
+    c.interpolation === "linear" &&
+    c.points.length === 2 &&
+    c.points[0].marketCapUsd === 20_000 &&
+    c.points[0].rewardBps === 5_000 &&
+    c.points[1].marketCapUsd === 100_000 &&
+    c.points[1].rewardBps === 2_500,
+  next: () => structuredClone(DEFAULT_CONFIG.reward_curve),
+  note: "Default revision: coins launch on pump.fun with 50% of creator fees locked to the reward vault, so all fees reaching the vault fund rewards.",
+};
+
 async function run<K extends ConfigKey>(rev: Revision<K>): Promise<boolean> {
   const current = await getConfig(rev.key);
   if (!rev.appliesTo(current.value)) return false;
@@ -66,6 +80,7 @@ async function run<K extends ConfigKey>(rev: Revision<K>): Promise<boolean> {
 export async function applyDefaultRevisions(): Promise<string[]> {
   const applied: string[] = [];
   if (await run(PAYOUT_MINIMUM_500)) applied.push(PAYOUT_MINIMUM_500.id);
+  if (await run(FEE_SPLIT_FLAT)) applied.push(FEE_SPLIT_FLAT.id);
   let rescore = false;
   if (await run(BENCHMARK_MULTIPLIERS)) {
     applied.push(BENCHMARK_MULTIPLIERS.id);

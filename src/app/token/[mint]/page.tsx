@@ -14,6 +14,7 @@ import { Delta } from "@/components/ui/stat";
 import { TradeButtons } from "@/components/token/trade-buttons";
 import { TokenAvatar } from "@/components/ui/token-avatar";
 import { bpsToPct, compactNumber, dateTimeUtc, fullNumber, price, score, shortAddress, sol, timeAgo, usd } from "@/lib/format";
+import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
 import { getCompetitionDetail } from "@/lib/queries/public";
 import { explorerAccountUrl, explorerTokenUrl } from "@/lib/solana/cluster";
 
@@ -51,6 +52,7 @@ async function TokenDetail({ params }: Pick<PageProps<"/token/[mint]">, "params"
   const tradeDisabled = d.isSimulated;
   const buyUrl = `https://jup.ag/swap/${SOL_MINT}-${d.mint}`;
   const sellUrl = `https://jup.ag/swap/${d.mint}-${SOL_MINT}`;
+  const pumpUrl = d.launchProvider === "pumpfun" ? `https://pump.fun/coin/${d.mint}` : null;
 
   return (
     <div className="animate-fade-in">
@@ -90,7 +92,7 @@ async function TokenDetail({ params }: Pick<PageProps<"/token/[mint]">, "params"
               </span>
             </>
           ) : (
-            <TradeButtons buyUrl={buyUrl} sellUrl={sellUrl} symbol={d.symbol} />
+            <TradeButtons buyUrl={buyUrl} sellUrl={sellUrl} pumpUrl={pumpUrl} symbol={d.symbol} />
           )}
           <ButtonLink href={`/competitions/${d.mint}`} variant="secondary">
             Competition
@@ -146,7 +148,7 @@ async function TokenDetail({ params }: Pick<PageProps<"/token/[mint]">, "params"
                 <Delta value={d.priceChange24hPct} />
               </KV>
               <KV label="Total supply">{compactNumber(d.totalSupply)}</KV>
-              <KV label="Creator fees generated">{sol(d.feesTotalLamports)}</KV>
+              <KV label="Fees to rewards">{sol(d.feesTotalLamports)}</KV>
               <KV label="Launched">{dateTimeUtc(d.launchedAt)}</KV>
               <KV label="Deployer">
                 <Link href={`/creators/${d.deployerWallet}`} className="font-mono text-[12px] text-ink-2 hover:text-ink">
@@ -176,7 +178,7 @@ async function TokenDetail({ params }: Pick<PageProps<"/token/[mint]">, "params"
           <Panel title="Competition" action={<CompetitionStatus status={d.status} />}>
             <div className="divide-y divide-edge px-5">
               <KV label="Reward pool (est.)">{sol(d.estimatedRewardLamports)}</KV>
-              <KV label="Reward share">{bpsToPct(d.currentRewardBps)}</KV>
+              <KV label="Reward share">{bpsToPct(CREATOR_FEE_SPLIT.vaultBps)} of creator fees</KV>
               <KV label="Video views">{compactNumber(d.totalViews)}</KV>
               <KV label="Creators">{fullNumber(d.creatorCount)}</KV>
               <KV label="Leading Viral Score">{leader ? score(leader.viralScore) : "—"}</KV>

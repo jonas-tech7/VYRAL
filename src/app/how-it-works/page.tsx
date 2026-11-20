@@ -9,7 +9,8 @@ import { Container, Skeleton } from "@/components/ui/misc";
 import { isEstimate } from "@/lib/config/defaults";
 import { getAllConfig } from "@/lib/config/store";
 import { PLATFORM_LABEL, PLATFORMS } from "@/lib/domain/platforms";
-import { bpsToPct, cn, fullNumber, usd } from "@/lib/format";
+import { bpsToPct, cn, fullNumber } from "@/lib/format";
+import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
 
 export const metadata: Metadata = {
   title: "How it works",
@@ -103,21 +104,20 @@ const A = ({ href, children }: { href: string; children: ReactNode }) => (
 
 async function Content() {
   await connection();
-  const { scoring, eligibility, payouts, reward_curve } = await getAllConfig();
+  const { scoring, eligibility, payouts } = await getAllConfig();
   const sc = scoring.value;
   const minViews = fullNumber(eligibility.value.minVerifiedViews);
   const intervals = payouts.value.allowedIntervalsHours.map((h) => `${h}h`).join(" or ");
-  const curve = reward_curve.value.points;
-  const first = curve[0];
-  const last = curve[curve.length - 1];
+  const vaultPct = bpsToPct(CREATOR_FEE_SPLIT.vaultBps);
+  const deployerPct = bpsToPct(CREATOR_FEE_SPLIT.deployerBps);
 
   return (
     <div className="min-w-0 max-w-[820px]">
       <Section id="idea" index={1} title="The idea">
         <p>
           A coin lives on the people who talk about it: the videos, the reposts, the conversation. VYRAL exists to make coins go viral, which is where the
-          name comes from. Every coin launched here opens its own video competition, and a share of the creator fees it earns from trading is paid to the
-          creators whose videos about it perform best.
+          name comes from. Every coin launched here opens its own video competition, and {vaultPct} of the creator fees it earns from trading are paid
+          to the creators whose videos about it perform best.
         </p>
         <p className="mt-3">
           The incentives point the same way. Creators are paid for the reach they actually generate, and the coin gains the attention it needs to be
@@ -133,10 +133,14 @@ async function Content() {
 
       <Section id="launch" index={2} title="Launching a coin">
         <p>
-          Anyone with a Solana wallet can launch a coin: name, ticker, image, an optional description and social links. Before signing, the launch screen
-          shows exactly how the creator fees are shared. The coin&apos;s competition opens in the same step.
+          Anyone with a Solana wallet can launch a coin on pump.fun: name, ticker, image, an optional description and social links. Before signing, the
+          launch screen shows exactly how the creator fees are shared. The coin&apos;s competition opens in the same step.
         </p>
         <ul className="mt-4 flex list-disc flex-col gap-2 pl-5 marker:text-ink-4">
+          <li>
+            <span className="text-ink">Fee split:</span> {vaultPct} of the coin&apos;s creator fees fund its competition and {deployerPct} go to the
+            deployer. The split is set in the launch transaction and locked on-chain, so it can&apos;t be changed later.
+          </li>
           <li>
             <span className="text-ink">Payout interval:</span> the deployer chooses whether rewards are paid every {intervals}. Shorter rounds pay smaller
             amounts more often; longer rounds collect more fees per payout.
@@ -288,14 +292,21 @@ async function Content() {
 
       <Section id="fees" index={7} title="Where the money comes from">
         <p>
-          Rewards come only from the creator fees a coin generates when it is traded. Only fees that were actually collected and confirmed on-chain are
-          used; pending fees are never paid out, and nothing is promised in advance.
+          Rewards come only from the creator fees a coin generates when it is traded on pump.fun. When the coin launches, those fees are split in two,
+          in the launch transaction itself:
+        </p>
+        <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-edge bg-edge">
+          <Rule value={vaultPct} label="To the coin's competition, through VYRAL's reward vault" />
+          <Rule value={deployerPct} label="To the deployer's wallet, paid directly by pump.fun" />
+        </div>
+        <p className="mt-5">
+          The split is locked on-chain: once the coin is live, neither the deployer nor VYRAL can change it, and VYRAL never holds the deployer&apos;s
+          half. Everything that reaches the vault for a coin funds that coin&apos;s competition: at each checkpoint, the top eligible video receives
+          everything collected since the last payout. If no video is eligible, the fees roll over to the next checkpoint.
         </p>
         <p className="mt-3">
-          The share that goes to creators depends on the coin&apos;s market cap and follows a public curve: {bpsToPct(first.rewardBps, 0)} of fees at{" "}
-          {usd(first.marketCapUsd, { compact: true })}, falling to {bpsToPct(last.rewardBps, 0)} at {usd(last.marketCapUsd, { compact: true })}. Young,
-          small coins need attention most, so a larger share of their fees funds creators. The rest goes to the coin&apos;s deployer.{" "}
-          <A href="/docs/fees">Fees &amp; reward curve</A>
+          Only fees that were actually collected and confirmed on-chain are used. Pending fees are never paid out, nothing is pre-funded, and nothing is
+          promised in advance. <A href="/docs/fees">Fees &amp; payouts</A>
         </p>
       </Section>
 

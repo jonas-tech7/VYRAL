@@ -15,6 +15,7 @@ import { Stat, StatGrid } from "@/components/ui/stat";
 import { TokenAvatar } from "@/components/ui/token-avatar";
 import { getAllConfig } from "@/lib/config/store";
 import { bpsToPct, compactNumber, fullNumber, score, shortAddress, sol, solToUsd, usd } from "@/lib/format";
+import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
 import { getCompetitionDetail, getPlatformStats, listCompetitions } from "@/lib/queries/public";
 
 export default function HomePage() {
@@ -156,7 +157,7 @@ async function PlatformStats() {
       <StatGrid>
         <Stat label="Tokens launched" value={fullNumber(s.tokensLaunched)} sub={`${s.tokensLaunched24h} in the last 24h`} size="lg" />
         <Stat
-          label="Creator fees generated"
+          label="Fees to rewards"
           value={sol(s.feesGeneratedLamports)}
           sub={s.solUsd ? `≈ ${usd(solToUsd(s.feesGeneratedLamports, s.solUsd), { compact: true })}` : "Confirmed on-chain"}
           size="lg"
@@ -204,9 +205,7 @@ async function LiveStrip() {
       <div className="bg-raised px-5 py-4">
         <p className="text-[11.5px] text-ink-3">Next payout (est.)</p>
         <p className="num mt-0.5 text-[16px] font-semibold tracking-[-0.01em] text-ink">{sol(top.estimatedRewardLamports)}</p>
-        <p className="text-[11.5px] text-ink-4">
-          {bpsToPct(top.currentRewardBps)} of fees at {usd(top.marketCapUsd, { compact: true })}
-        </p>
+        <p className="text-[11.5px] text-ink-4">{bpsToPct(CREATOR_FEE_SPLIT.vaultBps)} of creator fees</p>
       </div>
       <div className="bg-raised px-5 py-4">
         <p className="text-[11.5px] text-ink-3">Checkpoint in</p>

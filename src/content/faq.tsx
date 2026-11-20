@@ -1,7 +1,12 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { bpsToPct } from "@/lib/format";
+import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
 
 export type FaqItem = { id: string; q: string; a: () => ReactNode };
+
+const VAULT_PCT = bpsToPct(CREATOR_FEE_SPLIT.vaultBps);
+const DEPLOYER_PCT = bpsToPct(CREATOR_FEE_SPLIT.deployerBps);
 
 export const FAQ: FaqItem[] = [
   {
@@ -9,9 +14,9 @@ export const FAQ: FaqItem[] = [
     q: "What is VYRAL?",
     a: () => (
       <p>
-        VYRAL is a token launchpad on Solana built to make coins go viral &mdash; that is where the name comes from. Every token launched here opens
-        its own video competition, and a share of the token&apos;s creator fees is paid to the creators and influencers whose videos about it perform
-        best.
+        VYRAL is a token launchpad on Solana built to make coins go viral &mdash; that is where the name comes from. Every token launched here goes
+        live on pump.fun with its own video competition, and {VAULT_PCT} of the token&apos;s creator fees are paid to the creators and influencers whose
+        videos about it perform best.
       </p>
     ),
   },
@@ -31,8 +36,9 @@ export const FAQ: FaqItem[] = [
     q: "Where does the reward money come from?",
     a: () => (
       <p>
-        From the creator fees a token generates when it is traded. Only fees that were actually collected and confirmed on-chain are paid out. Pending
-        fees are never used, and nothing is pre-funded or promised in advance. <Link href="/docs/fees">Fees &amp; reward curve</Link>
+        From the creator fees a token generates when it is traded on pump.fun. {VAULT_PCT} of them go to VYRAL&apos;s reward vault, and everything
+        that reaches the vault for a token funds that token&apos;s competition. Only fees that were actually collected and confirmed on-chain are paid
+        out. Pending fees are never used, and nothing is pre-funded or promised in advance. <Link href="/docs/fees">Fees &amp; payouts</Link>
       </p>
     ),
   },
@@ -41,9 +47,10 @@ export const FAQ: FaqItem[] = [
     q: "How much of the fees goes to creators?",
     a: () => (
       <p>
-        The share follows a public reward curve based on the token&apos;s market cap: younger, smaller tokens send a larger share of their fees to
-        creators. The remainder is retained for the token&apos;s deployer. The curve a competition uses is shown on its page and in the
-        documentation, and every change to it is logged. <Link href="/docs/fees">See the current curve</Link>
+        Every token&apos;s pump.fun creator fees are split in its launch transaction: {VAULT_PCT} go to VYRAL&apos;s reward vault and fund the
+        token&apos;s competition, and {DEPLOYER_PCT} go to the deployer&apos;s wallet. The deployer&apos;s share is paid by pump.fun directly; VYRAL
+        never holds it. The split is locked on-chain, so neither the deployer nor VYRAL can change it later. At every checkpoint, the top eligible video
+        receives all of the token&apos;s confirmed fees in the vault that haven&apos;t been paid out yet. <Link href="/docs/fees">Fees &amp; payouts</Link>
       </p>
     ),
   },

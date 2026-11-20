@@ -38,7 +38,7 @@ function NavList({ pathname }: { pathname: string }) {
             href={n.href}
             aria-current={isActive(pathname, n.href) ? "page" : undefined}
             className={cn(
-              "inline-flex h-8 items-center rounded-md px-3 text-[13.5px] transition-colors duration-150",
+              "inline-flex h-8 items-center whitespace-nowrap rounded-md px-3 text-[13.5px] transition-colors duration-150",
               isActive(pathname, n.href) ? "text-ink" : "text-ink-3 hover:text-ink",
             )}
           >

@@ -1,8 +1,8 @@
 /**
  * Build command for hosted deployments (Vercel):
  *   1. apply database migrations
- *   2. seed the clearly-labelled demo data, only if the database is empty
- *      and SEED_DEMO_DATA is not "false"
+ *   2. seed the clearly-labelled demo data, only if the database is empty,
+ *      SEED_DEMO_DATA is not "false" and every provider is still a demo one
  *   3. apply revisions of the default configuration (never overrides admin changes)
  *   4. grant the admin role to the wallets in ADMIN_WALLETS
  *   5. next build

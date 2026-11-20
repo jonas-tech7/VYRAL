@@ -79,10 +79,10 @@ Every external dependency sits behind an interface with a development implementa
 | Variable | Development (default) | Live |
 | --- | --- | --- |
 | `SOCIAL_PROVIDER` | `mock` — simulated metrics | `live` — YouTube Data API v3, TikTok Display API, Instagram API with Instagram Login, X API v2, with OAuth account linking |
-| `LAUNCH_PROVIDER` | `simulated` — signed launch intent, no on-chain token | `external` — launch service builds the creation transaction; VYRAL verifies the confirmed transaction via RPC |
+| `LAUNCH_PROVIDER` | `simulated` — signed launch intent, no on-chain token | `pumpfun` — one transaction creates the coin on pump.fun (`create_v2`), splits its creator fees 50/50 between the reward vault and the deployer and revokes the split's admin; VYRAL signs for the mint, the deployer's wallet signs and sends, and the split is verified on-chain before the competition opens (`lib/launch/pumpfun.ts`) |
 | `PRICE_PROVIDER` | `mock` | `jupiter` — Jupiter price + on-chain supply (RPC); DexScreener volume for display |
-| `FEE_PROVIDER` | `mock` | `onchain` — fee-vault deposits attributed by memo `VYRAL:fee:<mint>`, counted at finality |
-| `PAYOUT_EXECUTOR` | `simulated` — random signatures, never linked to explorers | `solana` — SOL transfers from the fee vault, signed by a **remote signer** (KMS/custody); a local keypair is permitted on devnet only |
+| `FEE_PROVIDER` | `mock` | `pumpfun` — the keeper distributes each coin's creator fees (permissionless sweep + `distribute_creator_fees_v2`, paid by the vault); the vault's balance change is that coin's fee, counted at finality |
+| `PAYOUT_EXECUTOR` | `simulated` — random signatures, never linked to explorers | `solana` — SOL transfers from the fee vault, signed by a **remote signer** (KMS/custody) or, with `PAYOUT_ALLOW_HOT_WALLET=true`, an environment keypair with a per-payout cap (`PAYOUT_MAX_LAMPORTS`) |
 | `STORAGE_PROVIDER` | `local` | `pinata` (IPFS) |
 
 ### Background jobs (`npm run worker`)
@@ -142,11 +142,13 @@ Integration tests run against `TEST_DATABASE_URL` (put it in `.env.test.local`).
 
 ## Going live — checklist
 
+Step by step (German): [GO-LIVE.md](GO-LIVE.md). **Admin → Go live** shows what is still missing and runs the one-time steps (lookup table, launch simulation against mainnet, removing the demo data).
+
 - [ ] Provision PostgreSQL with backups; run `npm run db:migrate`; **do not** run the demo seed.
 - [ ] Set `APP_URL`, secrets, `TRUST_PROXY=true` behind a reverse proxy (per-client rate limits).
-- [ ] Launch infrastructure: implement or connect the `external` launch service (bonding-curve pool creation that routes creator fees to the fee vault with a `VYRAL:fee:<mint>` memo).
-- [ ] Dedicated Solana RPC (`SOLANA_RPC_URL`), fee vault (`FEE_VAULT_ADDRESS`) and a remote signer (`REMOTE_SIGNER_URL`/`TOKEN`) backed by a KMS or custody provider.
+- [ ] pump.fun launches: `LAUNCH_PROVIDER=pumpfun`, `FEE_PROVIDER=pumpfun`, then create the launch lookup table and run the launch simulation in **Admin → Go live** (or `npm run pumpfun:lut` / `npm run pumpfun:simulate`).
+- [ ] Dedicated Solana RPC (`SOLANA_RPC_URL`), reward vault (`FEE_VAULT_ADDRESS`) and its signer: a remote signer (`REMOTE_SIGNER_URL`/`TOKEN`) or a capped hot wallet (`PAYOUT_SIGNER=env-keypair`, `PAYOUT_ALLOW_HOT_WALLET=true`).
 - [ ] Platform API access: YouTube Data API key + Google OAuth client; TikTok Login Kit + Display API (`video.list`); Instagram API with Instagram Login (`instagram_business_basic`, `instagram_business_manage_insights`); X API with OAuth 2.0. Each requires the platform's app review.
 - [ ] Switch providers to live values and run the worker; confirm `/api/health` and the admin overview job table.
-- [ ] Review every default in **Admin → Rules & reward curve** and **Viral Score**; calibrate multipliers once enough verified data exists.
+- [ ] Review every default in **Admin → Rules** and **Viral Score**; calibrate multipliers once enough verified data exists.
 - [ ] Obtain legal advice on token launches and creator rewards for your jurisdictions.

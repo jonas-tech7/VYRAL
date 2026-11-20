@@ -8,6 +8,6 @@ export const POST = route(
   { auth: "user", rateLimit: { name: "launch-confirm", limit: 30, windowSec: 3600, by: "wallet" } },
   async ({ json, viewer }) => {
     const { launchId, signature } = await json(body);
-    return confirmLaunch(viewer!.wallet, launchId, signature);
+    return confirmLaunch(viewer!.wallet, launchId, signature, viewer);
   },
 );

@@ -19,8 +19,9 @@ export const ADMIN_NAV = [
   { href: "/admin/fees", label: "Creator fees", group: "Money" },
   { href: "/admin/competitions", label: "Competitions", group: "Configure" },
   { href: "/admin/scoring", label: "Viral Score", group: "Configure" },
-  { href: "/admin/rules", label: "Rules & reward curve", group: "Configure" },
+  { href: "/admin/rules", label: "Rules", group: "Configure" },
   { href: "/admin/audit", label: "Audit log", group: "Configure" },
+  { href: "/admin/go-live", label: "Go live", group: "Configure" },
 ];
 
 export function AdminNav() {

@@ -10,12 +10,18 @@
  *
  *  - simulated: DEVELOPMENT ONLY. Generates an address-format mint that does
  *               not exist on-chain and requires a signed launch intent.
+ *  - pumpfun:   launches on pump.fun with the creator-fee split locked in the
+ *               same transaction (see lib/launch/pumpfun.ts). The server
+ *               signs for the new mint; the deployer's wallet signs and sends.
  *  - external:  adapter for launchpad infrastructure (e.g. a bonding-curve
  *               launch service). Builds the creation transaction remotely and
  *               verifies the confirmed transaction via RPC.
  */
 import { randomBytes } from "node:crypto";
-import { Connection, Keypair } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
+import { lookupTableAddress } from "@/lib/launch/lookup-table";
+import { buildPumpFunLaunch, verifyPumpFunLaunch } from "@/lib/launch/pumpfun";
 import { env } from "@/lib/env";
 import { verifyWalletSignature } from "@/lib/solana/keys";
 
@@ -37,6 +43,8 @@ export type PreparedLaunch = {
   mode: "message" | "transaction";
   intentMessage: string | null;
   transaction: string | null;
+  /** Unsigned transactions the wallet sends after `transaction` lands (e.g. the initial buy). */
+  followUp?: string[];
   expiresAt: Date;
 };
 
@@ -45,7 +53,7 @@ export type LaunchConfirmation =
   | { ok: false; error: string };
 
 export interface LaunchProvider {
-  readonly id: "simulated" | "external";
+  readonly id: "simulated" | "pumpfun" | "external";
   readonly isSimulated: boolean;
   /**
    * Optionally fixes the token address before the metadata is written, so the
@@ -123,7 +131,7 @@ class ExternalLaunchProvider implements LaunchProvider {
   }
 
   async confirm({ prepared, deployer, signature }: { prepared: PreparedLaunch; deployer: string; signature: string }) {
-    const tx = await this.connection.getParsedTransaction(signature, { maxSupportedTransactionVersion: 0, commitment: "confirmed" });
+    const tx = await this.connection.getParsedTransaction(signature, { maxSupportedTransactionVersion: 1, commitment: "confirmed" });
     if (!tx) return { ok: false as const, error: "Launch transaction not found (yet). Try again shortly." };
     if (tx.meta?.err) return { ok: false as const, error: "Launch transaction failed on-chain" };
     const keys = tx.transaction.message.accountKeys;
@@ -135,8 +143,87 @@ class ExternalLaunchProvider implements LaunchProvider {
   }
 }
 
+class PumpFunLaunchProvider implements LaunchProvider {
+  readonly id = "pumpfun" as const;
+  readonly isSimulated = false;
+  private connection = new Connection(env.SOLANA_RPC_URL ?? "https://api.mainnet-beta.solana.com", "confirmed");
+  /** Mint keypairs between reserveMint() and prepare() (same request); never persisted. */
+  private reserved = new Map<string, { keypair: Keypair; at: number }>();
+
+  private vault() {
+    if (!env.FEE_VAULT_ADDRESS) throw new Error("FEE_VAULT_ADDRESS is required for pump.fun launches");
+    return new PublicKey(env.FEE_VAULT_ADDRESS);
+  }
+
+  async reserveMint(): Promise<string> {
+    const now = Date.now();
+    for (const [k, v] of this.reserved) if (now - v.at > 10 * 60_000) this.reserved.delete(k);
+    const keypair = Keypair.generate();
+    this.reserved.set(keypair.publicKey.toBase58(), { keypair, at: now });
+    return keypair.publicKey.toBase58();
+  }
+
+  async prepare(input: LaunchInput): Promise<PreparedLaunch> {
+    const reserved = input.mint ? this.reserved.get(input.mint) : undefined;
+    const mint = reserved?.keypair ?? Keypair.generate();
+    if (input.mint) this.reserved.delete(input.mint);
+    const tableAddress = await lookupTableAddress();
+    const lookupTable = tableAddress ? (await this.connection.getAddressLookupTable(new PublicKey(tableAddress))).value : null;
+    if (!lookupTable) throw new Error("Launches are not set up yet: create the lookup table in the admin dashboard.");
+    const built = await buildPumpFunLaunch(this.connection, {
+      mint: mint.publicKey,
+      deployer: new PublicKey(input.deployer),
+      vault: this.vault(),
+      vaultShareBps: CREATOR_FEE_SPLIT.vaultBps,
+      name: input.name,
+      symbol: input.symbol,
+      uri: input.metadataUri,
+      initialBuyLamports: input.initialBuyLamports,
+      lookupTable,
+    });
+    const [tx, ...rest] = built.transactions;
+    // The mint signs first; any change to the transaction (e.g. dropping the fee split) invalidates it.
+    tx.sign([mint]);
+    const b64 = (t: (typeof built.transactions)[number]) => Buffer.from(t.serialize()).toString("base64");
+    return {
+      mint: mint.publicKey.toBase58(),
+      mode: "transaction",
+      intentMessage: null,
+      transaction: b64(tx),
+      followUp: rest.map(b64),
+      expiresAt: new Date(Date.now() + 90_000),
+    };
+  }
+
+  async confirm({ prepared, deployer, signature }: { prepared: PreparedLaunch; deployer: string; signature: string }) {
+    const tx = await this.connection.getTransaction(signature, { maxSupportedTransactionVersion: 0, commitment: "confirmed" });
+    if (!tx) return { ok: false as const, error: "Launch transaction not found (yet). Try again shortly." };
+    if (tx.meta?.err) return { ok: false as const, error: "Launch transaction failed on-chain" };
+    const keys = tx.transaction.message.getAccountKeys({ accountKeysFromLookups: tx.meta?.loadedAddresses }).staticAccountKeys;
+    const signers = keys.slice(0, tx.transaction.message.header.numRequiredSignatures).map((k) => k.toBase58());
+    if (!signers.includes(deployer) || !signers.includes(prepared.mint)) {
+      return { ok: false as const, error: "Transaction does not match the prepared launch" };
+    }
+    const verified = await verifyPumpFunLaunch(this.connection, {
+      mint: new PublicKey(prepared.mint),
+      deployer: new PublicKey(deployer),
+      vault: this.vault(),
+      vaultShareBps: CREATOR_FEE_SPLIT.vaultBps,
+    });
+    if (!verified.ok) return { ok: false as const, error: verified.error };
+    return { ok: true as const, launchSignature: signature, poolAddress: verified.bondingCurve };
+  }
+}
+
 let instance: LaunchProvider | null = null;
 export function launchProvider(): LaunchProvider {
-  if (!instance) instance = env.LAUNCH_PROVIDER === "external" ? new ExternalLaunchProvider() : new SimulatedLaunchProvider();
+  if (!instance) {
+    instance =
+      env.LAUNCH_PROVIDER === "pumpfun"
+        ? new PumpFunLaunchProvider()
+        : env.LAUNCH_PROVIDER === "external"
+          ? new ExternalLaunchProvider()
+          : new SimulatedLaunchProvider();
+  }
   return instance;
 }

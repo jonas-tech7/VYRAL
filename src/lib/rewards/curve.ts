@@ -11,6 +11,11 @@
  */
 import type { RewardCurveConfig } from "@/lib/config/schemas";
 
+/** True when the share is the same at every market cap, so a checkpoint needs no price data. */
+export function curveIsFlat(curve: RewardCurveConfig): boolean {
+  return new Set(curve.points.map((p) => p.rewardBps)).size <= 1;
+}
+
 export function rewardBpsForMarketCap(curve: RewardCurveConfig, marketCapUsd: number): number {
   const pts = curve.points;
   if (pts.length === 0) return 0;

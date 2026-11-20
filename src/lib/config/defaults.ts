@@ -99,12 +99,15 @@ export const DEFAULT_CONFIG: ConfigShapes = {
     autoAttemptBudget: 3,
     excludeDeployerFromRewards: true,
   },
+  /**
+   * Share of the fees that reach the reward vault which is paid to creators.
+   * The vault only ever receives the competition's half of a coin's creator
+   * fees (split locked on pump.fun at launch, see lib/launch/fee-split.ts),
+   * so all of it funds rewards.
+   */
   reward_curve: {
-    interpolation: "linear",
-    points: [
-      { marketCapUsd: 20_000, rewardBps: 5_000 },
-      { marketCapUsd: 100_000, rewardBps: 2_500 },
-    ],
+    interpolation: "step",
+    points: [{ marketCapUsd: 0, rewardBps: 10_000 }],
   },
   fraud: {
     reviewRiskThreshold: 50,
@@ -127,4 +130,5 @@ export const DEFAULT_CONFIG: ConfigShapes = {
     velocity: { maxSubmissions24h: 10 },
     sharedNetwork: { minWallets: 3 },
   },
+  platform_token: { mint: null, symbol: "VYRAL" },
 };

@@ -19,7 +19,7 @@ const COLUMNS = [
     links: [
       { href: "/docs/viral-score", label: "Viral Score" },
       { href: "/docs/payouts", label: "Payouts" },
-      { href: "/docs/fees", label: "Fees & reward curve" },
+      { href: "/docs/fees", label: "Fees & payouts" },
       { href: "/docs/anti-fraud", label: "Anti-fraud" },
     ],
   },

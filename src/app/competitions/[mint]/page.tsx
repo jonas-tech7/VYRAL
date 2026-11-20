@@ -6,7 +6,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { eq } from "drizzle-orm";
-import { CurveChart } from "@/components/charts/curve-chart";
 import { CompetitionStatus, Eligibility, VideoStatus } from "@/components/competition/status";
 import { CHECKPOINT_OUTCOME, PayoutStatus, TxSignature } from "@/components/competition/tx";
 import { DemoTag } from "@/components/ui/badge";
@@ -20,9 +19,13 @@ import { TokenAvatar } from "@/components/ui/token-avatar";
 import { db, schema } from "@/lib/db";
 import { PLATFORM_LABEL, PLATFORM_SHORT, PLATFORMS } from "@/lib/domain/platforms";
 import { env } from "@/lib/env";
+import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
 import { coinPageUrl } from "@/lib/launch/metadata";
 import { age, bpsToPct, compactNumber, dateTimeUtc, fullNumber, price, score, shortAddress, sol, solToUsd, timeAgo, usd } from "@/lib/format";
 import { getCompetitionDetail } from "@/lib/queries/public";
+
+const VAULT_PCT = bpsToPct(CREATOR_FEE_SPLIT.vaultBps);
+const DEPLOYER_PCT = bpsToPct(CREATOR_FEE_SPLIT.deployerBps);
 
 async function tokenMeta(mint: string) {
   "use cache";
@@ -137,11 +140,11 @@ async function Detail({ params, searchParams }: Pick<PageProps<"/competitions/[m
         <Stat label="Market cap" value={usd(d.marketCapUsd, { compact: true })} sub={`Price ${price(d.priceUsd)}`} />
         <Stat label="24h volume" value={usd(d.volume24hUsd, { compact: true })} sub={<Change v={d.priceChange24hPct} />} />
         <Stat
-          label="Creator fees generated"
+          label="Fees to rewards"
           value={sol(d.feesTotalLamports)}
           sub={d.solUsd ? `≈ ${usd(solToUsd(d.feesTotalLamports, d.solUsd), { compact: true })} · confirmed` : "Confirmed on-chain"}
         />
-        <Stat label="Reward pool" value={sol(d.estimatedRewardLamports)} sub={`Next payout est. · ${bpsToPct(d.currentRewardBps)}`} />
+        <Stat label="Reward pool" value={sol(d.estimatedRewardLamports)} sub="Next payout est." />
         <Stat label="Total video views" value={compactNumber(d.totalViews)} sub="Verified + in review" />
         <Stat label="Videos submitted" value={fullNumber(d.videoCount)} sub={`${d.submissions24h} in the last 24h`} />
         <Stat label="Creators" value={fullNumber(d.creatorCount)} sub="Unique wallets" />
@@ -158,14 +161,14 @@ async function Detail({ params, searchParams }: Pick<PageProps<"/competitions/[m
             <p className="mt-0.5 text-[12px] text-ink-3">{dateTimeUtc(d.nextCheckpointAt)}</p>
           </div>
           <div className="divide-y divide-edge border-t border-edge px-5">
+            <KV label="Share to rewards">
+              <span className="num">{VAULT_PCT}</span> of creator fees
+            </KV>
             <KV label="Unallocated confirmed fees">
               <span className="num">{sol(d.unallocatedLamports)}</span>
             </KV>
             <KV label="Pending confirmation">
               <span className="num text-ink-3">{sol(d.pendingFeesLamports)}</span>
-            </KV>
-            <KV label={`Reward share at ${usd(d.marketCapUsd, { compact: true })}`}>
-              <span className="num">{bpsToPct(d.currentRewardBps)}</span>
             </KV>
             <KV label="Estimated reward">
               <span className="num font-medium">{sol(d.estimatedRewardLamports)}</span>
@@ -181,34 +184,39 @@ async function Detail({ params, searchParams }: Pick<PageProps<"/competitions/[m
             </KV>
           </div>
           <p className="border-t border-edge px-5 py-3 text-[12px] leading-relaxed text-ink-3">
-            Only confirmed fees count. The final share uses the 30-minute TWAP market cap at the checkpoint.
+            Only confirmed fees count, and the top eligible video receives all of them. If no video is eligible, they roll over to the next checkpoint.
           </p>
         </Panel>
 
-        <Panel title="Reward curve" action={<span className="text-[12px] text-ink-3">Rules v{d.rulesConfigVersion}</span>}>
-          <div className="px-3 pt-3">
-            <CurveChart curve={d.rewardCurve} currentMarketCap={d.marketCapUsd} height={176} />
+        <Panel title="Fee split" action={<span className="text-[12px] text-ink-3">Locked on-chain</span>} className="flex flex-col">
+          <div className="px-5 pb-5 pt-4">
+            <p className="text-[12px] text-ink-3">Share of this coin&apos;s creator fees</p>
+            <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-overlay-2" aria-hidden>
+              <div className="h-full bg-accent" style={{ width: `${CREATOR_FEE_SPLIT.vaultBps / 100}%` }} />
+              <div className="h-full bg-ink-3" style={{ width: `${CREATOR_FEE_SPLIT.deployerBps / 100}%` }} />
+            </div>
+            <dl className="mt-4 grid grid-cols-2 gap-4">
+              <div>
+                <dt className="flex items-center gap-2 text-[12px] text-ink-3">
+                  <span className="size-2 rounded-full bg-accent" aria-hidden />
+                  Competition rewards
+                </dt>
+                <dd className="num mt-1 text-[26px] font-semibold tracking-[-0.02em] text-ink">{VAULT_PCT}</dd>
+                <dd className="text-[12px] text-ink-3">Into the reward vault</dd>
+              </div>
+              <div>
+                <dt className="flex items-center gap-2 text-[12px] text-ink-3">
+                  <span className="size-2 rounded-full bg-ink-3" aria-hidden />
+                  Deployer
+                </dt>
+                <dd className="num mt-1 text-[26px] font-semibold tracking-[-0.02em] text-ink">{DEPLOYER_PCT}</dd>
+                <dd className="text-[12px] text-ink-3">Paid by pump.fun</dd>
+              </div>
+            </dl>
           </div>
-          <div className="border-t border-edge px-5 py-3">
-            <table className="w-full text-[12.5px]">
-              <caption className="sr-only">Reward curve points</caption>
-              <thead>
-                <tr className="text-ink-3">
-                  <th className="pb-1 text-left font-normal">Market cap</th>
-                  <th className="pb-1 text-right font-normal">Share of new fees</th>
-                </tr>
-              </thead>
-              <tbody>
-                {d.rewardCurve.points.map((p) => (
-                  <tr key={p.marketCapUsd}>
-                    <td className="num py-0.5 text-ink-2">{usd(p.marketCapUsd, { compact: true })}</td>
-                    <td className="num py-0.5 text-right text-ink">{bpsToPct(p.rewardBps)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="mt-2 text-[12px] text-ink-3">{d.rewardCurve.interpolation === "step" ? "Stepped" : d.rewardCurve.interpolation === "log" ? "Log-interpolated" : "Linearly interpolated"} between points; clamped outside.</p>
-          </div>
+          <p className="mt-auto border-t border-edge px-5 py-3 text-[12px] leading-relaxed text-ink-3">
+            The split was locked on pump.fun when the coin launched and can&apos;t be changed, not by the deployer and not by VYRAL.
+          </p>
         </Panel>
 
         <Panel title="Rules">
@@ -220,9 +228,6 @@ async function Detail({ params, searchParams }: Pick<PageProps<"/competitions/[m
             <KV label="Ranking">Viral Score (views-weighted)</KV>
             <KV label="Deployer">
               <span className="font-mono text-[12px] text-ink-2">{shortAddress(d.deployerWallet)}</span>
-            </KV>
-            <KV label="Deployer share retained">
-              <span className="num">{sol(d.retainedLamports)}</span>
             </KV>
           </div>
           <div className="border-t border-edge px-5 py-3">

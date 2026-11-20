@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG } from "@/lib/config/defaults";
-import { rewardCurveSchema, scoringConfigSchema, type ScoringConfig } from "@/lib/config/schemas";
+import { rewardCurveSchema, scoringConfigSchema, type RewardCurveConfig, type ScoringConfig } from "@/lib/config/schemas";
 import { assessFraud, hammingDistance, type FraudInput, type Snapshot } from "@/lib/fraud/detectors";
 import { allocateFees, eligibilityOf, nextCheckpointAfter, selectWinner, type LeaderboardEntry } from "@/lib/rewards/allocation";
 import { rewardBpsForMarketCap } from "@/lib/rewards/curve";
@@ -135,7 +135,18 @@ describe("Calibration", () => {
 });
 
 describe("Reward curve", () => {
-  const curve = DEFAULT_CONFIG.reward_curve;
+  const curve: RewardCurveConfig = {
+    interpolation: "linear",
+    points: [
+      { marketCapUsd: 20_000, rewardBps: 5_000 },
+      { marketCapUsd: 100_000, rewardBps: 2_500 },
+    ],
+  };
+
+  it("default pays out everything that reaches the vault (the 50% split is locked on-chain)", () => {
+    expect(rewardBpsForMarketCap(DEFAULT_CONFIG.reward_curve, 0)).toBe(10_000);
+    expect(rewardBpsForMarketCap(DEFAULT_CONFIG.reward_curve, 5_000_000)).toBe(10_000);
+  });
 
   it("clamps at both ends", () => {
     expect(rewardBpsForMarketCap(curve, 5_000)).toBe(5_000);

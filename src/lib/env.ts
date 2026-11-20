@@ -40,9 +40,9 @@ const schema = z.object({
   SOLANA_RPC_URL: optionalString,
 
   SOCIAL_PROVIDER: z.enum(["mock", "live"]).default("mock"),
-  LAUNCH_PROVIDER: z.enum(["simulated", "external"]).default("simulated"),
+  LAUNCH_PROVIDER: z.enum(["simulated", "pumpfun", "external"]).default("simulated"),
   PRICE_PROVIDER: z.enum(["mock", "jupiter"]).default("mock"),
-  FEE_PROVIDER: z.enum(["mock", "onchain"]).default("mock"),
+  FEE_PROVIDER: z.enum(["mock", "pumpfun", "onchain"]).default("mock"),
   PAYOUT_EXECUTOR: z.enum(["simulated", "solana"]).default("simulated"),
   /** local: files on disk · database: stored in PostgreSQL (serverless hosts) · pinata: IPFS */
   STORAGE_PROVIDER: z.enum(["local", "database", "pinata"]).default("local"),
@@ -57,6 +57,18 @@ const schema = z.object({
   REMOTE_SIGNER_URL: optionalString,
   REMOTE_SIGNER_TOKEN: optionalString,
 
+  /** Address lookup table created by scripts/pumpfun-lut.ts (keeps a launch in one transaction). */
+  PUMPFUN_LOOKUP_TABLE: optionalString,
+  /**
+   * Allows the payout signer to be a key stored in the environment on
+   * mainnet-beta (a "hot wallet"). Off by default; when on, every single
+   * payout is capped at PAYOUT_MAX_LAMPORTS.
+   */
+  PAYOUT_ALLOW_HOT_WALLET: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  PAYOUT_MAX_LAMPORTS: z.coerce.number().int().positive().default(5_000_000_000),
   EXTERNAL_LAUNCH_API_URL: optionalString,
   EXTERNAL_LAUNCH_API_KEY: optionalString,
   JUPITER_PRICE_API_URL: z.string().url().default("https://lite-api.jup.ag/price/v3"),
@@ -119,6 +131,25 @@ export const isDemoMode =
   env.FEE_PROVIDER === "mock" ||
   env.PAYOUT_EXECUTOR === "simulated";
 
+/**
+ * Platforms whose API credentials are configured. With SOCIAL_PROVIDER=mock
+ * every platform works (simulated); live submissions for a platform without
+ * credentials are refused with a clear message.
+ */
+export function platformConfigured(platform: "youtube" | "tiktok" | "instagram" | "x"): boolean {
+  if (env.SOCIAL_PROVIDER === "mock") return true;
+  switch (platform) {
+    case "youtube":
+      return Boolean(env.YOUTUBE_API_KEY && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+    case "tiktok":
+      return Boolean(env.TIKTOK_CLIENT_KEY && env.TIKTOK_CLIENT_SECRET);
+    case "instagram":
+      return Boolean(env.INSTAGRAM_CLIENT_ID && env.INSTAGRAM_CLIENT_SECRET);
+    case "x":
+      return Boolean(env.X_BEARER_TOKEN && env.X_CLIENT_ID && env.X_CLIENT_SECRET);
+  }
+}
+
 export function adminWalletsFromEnv(): string[] {
   return (env.ADMIN_WALLETS ?? "")
     .split(",")
@@ -140,14 +171,18 @@ export function assertLiveConfig(): string[] {
     if (env.PAYOUT_SIGNER === "remote" && (!env.REMOTE_SIGNER_URL || !env.REMOTE_SIGNER_TOKEN))
       problems.push("PAYOUT_SIGNER=remote requires REMOTE_SIGNER_URL and REMOTE_SIGNER_TOKEN");
     if (!env.PAYOUT_SIGNER) problems.push("PAYOUT_EXECUTOR=solana requires PAYOUT_SIGNER");
-    if (env.SOLANA_CLUSTER === "mainnet-beta" && env.PAYOUT_SIGNER === "env-keypair")
-      problems.push("env-keypair signing is not permitted on mainnet-beta; use a remote signer (KMS/custody)");
+    if (env.SOLANA_CLUSTER === "mainnet-beta" && env.PAYOUT_SIGNER === "env-keypair" && !env.PAYOUT_ALLOW_HOT_WALLET)
+      problems.push("env-keypair signing on mainnet-beta requires PAYOUT_ALLOW_HOT_WALLET=true (or use a remote signer)");
   }
   if (env.SOCIAL_PROVIDER === "live") {
     if (!env.TOKEN_ENCRYPTION_KEY) problems.push("SOCIAL_PROVIDER=live requires TOKEN_ENCRYPTION_KEY");
   }
   if (env.FEE_PROVIDER === "onchain" && (!env.SOLANA_RPC_URL || !env.FEE_VAULT_ADDRESS))
     problems.push("FEE_PROVIDER=onchain requires SOLANA_RPC_URL and FEE_VAULT_ADDRESS");
+  if (env.LAUNCH_PROVIDER === "pumpfun" && (!env.SOLANA_RPC_URL || !env.FEE_VAULT_ADDRESS))
+    problems.push("LAUNCH_PROVIDER=pumpfun requires SOLANA_RPC_URL and FEE_VAULT_ADDRESS");
+  if (env.FEE_PROVIDER === "pumpfun" && (!env.SOLANA_RPC_URL || !env.FEE_VAULT_ADDRESS || env.PAYOUT_EXECUTOR !== "solana"))
+    problems.push("FEE_PROVIDER=pumpfun requires SOLANA_RPC_URL, FEE_VAULT_ADDRESS and PAYOUT_EXECUTOR=solana (the vault signs distributions)");
   if (env.LAUNCH_PROVIDER === "external" && !env.EXTERNAL_LAUNCH_API_URL)
     problems.push("LAUNCH_PROVIDER=external requires EXTERNAL_LAUNCH_API_URL");
   if (env.STORAGE_PROVIDER === "pinata" && !env.PINATA_JWT) problems.push("STORAGE_PROVIDER=pinata requires PINATA_JWT");

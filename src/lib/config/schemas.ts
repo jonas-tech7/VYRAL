@@ -5,8 +5,9 @@
  */
 import { z } from "zod";
 import { PLATFORMS } from "@/lib/domain/platforms";
+import { isValidAddress } from "@/lib/solana/keys";
 
-export const CONFIG_KEYS = ["scoring", "eligibility", "payouts", "reward_curve", "fraud"] as const;
+export const CONFIG_KEYS = ["scoring", "eligibility", "payouts", "reward_curve", "fraud", "platform_token"] as const;
 export type ConfigKey = (typeof CONFIG_KEYS)[number];
 
 /* --------------------------- Scoring ---------------------------------- */
@@ -199,12 +200,26 @@ export const fraudConfigSchema = z.object({
 });
 export type FraudConfig = z.infer<typeof fraudConfigSchema>;
 
+/* --------------------------- Platform token ---------------------------- */
+
+/** The official $VYRAL coin, shown in the site header once set. */
+export const platformTokenSchema = z.object({
+  mint: z
+    .string()
+    .trim()
+    .nullable()
+    .refine((v) => v === null || isValidAddress(v), "Enter a valid Solana address"),
+  symbol: z.string().trim().min(1).max(10).default("VYRAL"),
+});
+export type PlatformTokenConfig = z.infer<typeof platformTokenSchema>;
+
 export type ConfigShapes = {
   scoring: ScoringConfig;
   eligibility: EligibilityConfig;
   payouts: PayoutConfig;
   reward_curve: RewardCurveConfig;
   fraud: FraudConfig;
+  platform_token: PlatformTokenConfig;
 };
 
 export const CONFIG_SCHEMAS: { [K in ConfigKey]: z.ZodType<ConfigShapes[K]> } = {
@@ -213,4 +228,5 @@ export const CONFIG_SCHEMAS: { [K in ConfigKey]: z.ZodType<ConfigShapes[K]> } = 
   payouts: payoutConfigSchema,
   reward_curve: rewardCurveSchema,
   fraud: fraudConfigSchema,
+  platform_token: platformTokenSchema,
 };

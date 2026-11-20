@@ -16,6 +16,7 @@ import { getConfig } from "@/lib/config/store";
 import { db, schema } from "@/lib/db";
 import { mentionsContractAddress } from "@/lib/domain/mentions";
 import { PLATFORM_LABEL, type Platform } from "@/lib/domain/platforms";
+import { platformConfigured } from "@/lib/env";
 import { socialProvider } from "@/lib/providers/social";
 import { ProviderError, type ResolvedVideo } from "@/lib/providers/social/types";
 import { parseVideoUrl, type ParsedVideoUrl } from "@/lib/providers/social/url";
@@ -92,6 +93,9 @@ async function parseWithExpansion(url: string): Promise<ParsedVideoUrl> {
 async function evaluate(wallet: string, mint: string, url: string) {
   const { competition, token } = await competitionByMint(mint);
   const parsed = await parseWithExpansion(url);
+  if (!platformConfigured(parsed.platform)) {
+    throw new ApiError(422, "platform_unavailable", `${PLATFORM_LABEL[parsed.platform]} submissions open soon. Submit a video from another platform for now.`);
+  }
   const eligibility = (await getConfig("eligibility")).value;
 
   const [existing] = await db

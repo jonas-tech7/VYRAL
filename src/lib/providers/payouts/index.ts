@@ -49,6 +49,8 @@ export type ManualVerification = { ok: true; slot: number } | { ok: false; reaso
 export interface PayoutExecutor {
   readonly id: "simulated" | "solana";
   readonly isSimulated: boolean;
+  /** Largest payout sent automatically (null: no limit). Larger ones wait for an administrator. */
+  readonly maxAutoLamports: number | null;
   vaultAddress(): string;
   getVaultBalance(): Promise<number>;
   build(p: { payoutId: string; recipient: string; lamports: number }): Promise<BuiltAttempt>;
@@ -66,7 +68,7 @@ export function payoutMemo(payoutId: string): string {
 
 /* ------------------------------ Signers ------------------------------- */
 
-interface TransactionSigner {
+export interface TransactionSigner {
   publicKey: PublicKey;
   sign(tx: Transaction): Promise<void>;
 }
@@ -75,7 +77,8 @@ class EnvKeypairSigner implements TransactionSigner {
   private keypair: Keypair;
   constructor(secretBase58: string) {
     // Read from the environment at runtime only; never persisted or logged.
-    this.keypair = Keypair.fromSecretKey(bs58.decode(secretBase58));
+    const v = secretBase58.trim();
+    this.keypair = Keypair.fromSecretKey(v.startsWith("[") ? Uint8Array.from(JSON.parse(v) as number[]) : bs58.decode(v));
   }
   get publicKey() {
     return this.keypair.publicKey;
@@ -112,27 +115,40 @@ class RemoteSigner implements TransactionSigner {
   }
 }
 
+let signerInstance: TransactionSigner | null = null;
+/** The reward vault's signer (pays payouts and signs fee distributions). */
+export function vaultSigner(): TransactionSigner {
+  if (signerInstance) return signerInstance;
+  if (!env.FEE_VAULT_ADDRESS) throw new Error("FEE_VAULT_ADDRESS is required");
+  const vault = new PublicKey(env.FEE_VAULT_ADDRESS);
+  if (env.PAYOUT_SIGNER === "remote") {
+    signerInstance = new RemoteSigner(vault, env.REMOTE_SIGNER_URL ?? "", env.REMOTE_SIGNER_TOKEN ?? "");
+  } else if (env.PAYOUT_SIGNER === "env-keypair" && env.PAYOUT_SIGNER_SECRET_KEY) {
+    if (env.SOLANA_CLUSTER === "mainnet-beta" && !env.PAYOUT_ALLOW_HOT_WALLET) {
+      throw new Error("env-keypair signing on mainnet-beta requires PAYOUT_ALLOW_HOT_WALLET=true");
+    }
+    const kp = new EnvKeypairSigner(env.PAYOUT_SIGNER_SECRET_KEY);
+    if (!kp.publicKey.equals(vault)) throw new Error("PAYOUT_SIGNER_SECRET_KEY does not match FEE_VAULT_ADDRESS");
+    signerInstance = kp;
+  } else {
+    throw new Error("No payout signer configured");
+  }
+  return signerInstance;
+}
+
 /* ----------------------------- Executors ------------------------------ */
 
 class SolanaPayoutExecutor implements PayoutExecutor {
   readonly id = "solana" as const;
   readonly isSimulated = false;
+  readonly maxAutoLamports = env.PAYOUT_SIGNER === "env-keypair" ? env.PAYOUT_MAX_LAMPORTS : null;
   private connection: Connection;
   private signer: TransactionSigner;
 
   constructor() {
     if (!env.SOLANA_RPC_URL || !env.FEE_VAULT_ADDRESS) throw new Error("Solana payouts require SOLANA_RPC_URL and FEE_VAULT_ADDRESS");
     this.connection = new Connection(env.SOLANA_RPC_URL, "confirmed");
-    const vault = new PublicKey(env.FEE_VAULT_ADDRESS);
-    if (env.PAYOUT_SIGNER === "remote") {
-      this.signer = new RemoteSigner(vault, env.REMOTE_SIGNER_URL ?? "", env.REMOTE_SIGNER_TOKEN ?? "");
-    } else if (env.PAYOUT_SIGNER === "env-keypair" && env.PAYOUT_SIGNER_SECRET_KEY) {
-      if (env.SOLANA_CLUSTER === "mainnet-beta") throw new Error("env-keypair signing is disabled on mainnet-beta");
-      this.signer = new EnvKeypairSigner(env.PAYOUT_SIGNER_SECRET_KEY);
-      if (!this.signer.publicKey.equals(vault)) throw new Error("PAYOUT_SIGNER_SECRET_KEY does not match FEE_VAULT_ADDRESS");
-    } else {
-      throw new Error("No payout signer configured");
-    }
+    this.signer = vaultSigner();
   }
 
   vaultAddress() {
@@ -144,6 +160,9 @@ class SolanaPayoutExecutor implements PayoutExecutor {
   }
 
   async build({ payoutId, recipient, lamports }: { payoutId: string; recipient: string; lamports: number }) {
+    if (this.maxAutoLamports !== null && lamports > this.maxAutoLamports) {
+      throw new Error(`Payout of ${lamports} lamports exceeds PAYOUT_MAX_LAMPORTS; send it from the vault and settle it manually.`);
+    }
     const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash("confirmed");
     const tx = new Transaction({ feePayer: this.signer.publicKey, blockhash, lastValidBlockHeight }).add(
       ComputeBudgetProgram.setComputeUnitLimit({ units: 30_000 }),
@@ -193,7 +212,7 @@ class SolanaPayoutExecutor implements PayoutExecutor {
 
   async verifyTransfer(signature: string, expected: { recipient: string; lamports: number; payoutId: string }): Promise<ManualVerification> {
     if (!isValidTxSignature(signature)) return { ok: false, reason: "Invalid signature format" };
-    const tx = await this.connection.getParsedTransaction(signature, { maxSupportedTransactionVersion: 0, commitment: "finalized" });
+    const tx = await this.connection.getParsedTransaction(signature, { maxSupportedTransactionVersion: 1, commitment: "finalized" });
     if (!tx) return { ok: false, reason: "Transaction not found at finalized commitment" };
     if (tx.meta?.err) return { ok: false, reason: "Transaction failed on-chain" };
     const transfers = tx.transaction.message.instructions.filter(
@@ -218,6 +237,7 @@ export const SIM_PAYOUT_FAILURE_RATE = Number(process.env.SIMULATED_PAYOUT_FAILU
 class SimulatedPayoutExecutor implements PayoutExecutor {
   readonly id = "simulated" as const;
   readonly isSimulated = true;
+  readonly maxAutoLamports = null;
 
   vaultAddress() {
     return "simulated-vault";

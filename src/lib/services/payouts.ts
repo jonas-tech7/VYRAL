@@ -111,6 +111,17 @@ async function settleAttempt(attempt: Attempt, payout: Payout, st: ChainStatus |
 
 async function startAttempt(payout: Payout, now: Date, triggeredBy: string) {
   const executor = payoutExecutor();
+  if (executor.maxAutoLamports !== null && payout.amountLamports > executor.maxAutoLamports) {
+    await db
+      .update(schema.payouts)
+      .set({
+        status: "requires_attention",
+        lastError: `Above the automatic payout limit of ${executor.maxAutoLamports / 1e9} SOL. Send it from the reward vault and settle it manually.`,
+        updatedAt: now,
+      })
+      .where(eq(schema.payouts.id, payout.id));
+    return "above_limit";
+  }
   if (!executor.isSimulated) {
     const balance = await executor.getVaultBalance();
     if (balance < payout.amountLamports + FEE_BUFFER_LAMPORTS) {
@@ -122,7 +133,17 @@ async function startAttempt(payout: Payout, now: Date, triggeredBy: string) {
     }
   }
 
-  const built = await executor.build({ payoutId: payout.id, recipient: payout.recipientWallet, lamports: payout.amountLamports });
+  let built: Awaited<ReturnType<typeof executor.build>>;
+  try {
+    built = await executor.build({ payoutId: payout.id, recipient: payout.recipientWallet, lamports: payout.amountLamports });
+  } catch (e) {
+    // Nothing was signed or sent; the payout stays pending and is tried again next run.
+    await db
+      .update(schema.payouts)
+      .set({ lastError: `Build error: ${e instanceof Error ? e.message.slice(0, 300) : String(e)}`, updatedAt: now })
+      .where(eq(schema.payouts.id, payout.id));
+    return "build_failed";
+  }
 
   // Persist the signed attempt BEFORE broadcasting.
   const created = await db.transaction(async (tx) => {
@@ -202,6 +223,7 @@ export async function executePayouts(now = new Date()) {
     }
     const r = await startAttempt(p, now, "worker");
     if (r === "submitted") summary.started++;
+    else if (r === "above_limit") summary.attention++;
   }
   return summary;
 }

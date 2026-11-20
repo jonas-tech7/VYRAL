@@ -11,14 +11,16 @@
  *      eligible entry (verified, ≥ min views, no open flags, published after
  *      launch, submitted before the checkpoint, not excluded).
  *   4. Compute the reference market cap (TWAP × supply) and the reward share
- *      from the competition's curve.
+ *      from the competition's curve (flat for pump.fun coins: 100% of the
+ *      vault's share, so the market cap is recorded but not required).
  *   5. Allocate: reward (floored) + retained = fees in window. Assign the fee
  *      events to the checkpoint and create one pending payout whose
  *      idempotency key is the checkpoint identity.
  *   6. Advance next_checkpoint_at.
  *
- * Fees roll over untouched when there are no fees, no reliable price, no
- * eligible winner, or the reward is below the dust threshold.
+ * Fees roll over untouched when there are no fees, no reliable price (only
+ * if the curve depends on it), no eligible winner, or the reward is below the
+ * dust threshold.
  * The transfer itself happens later in lib/services/payouts.ts.
  */
 import { and, asc, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm";
@@ -34,7 +36,7 @@ import {
   type EligibilityRules,
   type LeaderboardEntry,
 } from "@/lib/rewards/allocation";
-import { rewardBpsForMarketCap } from "@/lib/rewards/curve";
+import { curveIsFlat, rewardBpsForMarketCap } from "@/lib/rewards/curve";
 import { computeReferenceMarketCap } from "@/lib/rewards/reference-market-cap";
 import { audit } from "./audit";
 
@@ -224,12 +226,15 @@ export async function processCheckpoint(competitionId: string, scheduledAt: Date
       await finish("no_fees", common);
       return { competitionId, scheduledAt, status: "no_fees" };
     }
-    if (!ref.ok) {
+    // With a flat curve (every pump.fun coin: the vault's whole share is paid
+    // out) the market cap changes nothing, so missing price data must not hold
+    // a payout back; it is still recorded when available.
+    if (!ref.ok && !curveIsFlat(competition.rewardCurve)) {
       await finish("skipped_price_data", { ...common, note: `Reference market cap unavailable: ${ref.reason}` });
       return { competitionId, scheduledAt, status: "skipped_price_data" };
     }
 
-    const rewardBps = rewardBpsForMarketCap(competition.rewardCurve, ref.marketCapUsd);
+    const rewardBps = rewardBpsForMarketCap(competition.rewardCurve, ref.ok ? ref.marketCapUsd : 0);
     const allocation = allocateFees(fees, rewardBps);
 
     if (!winner) {
@@ -280,7 +285,7 @@ export async function processCheckpoint(competitionId: string, scheduledAt: Date
         videoId: winner.id,
         amountLamports: allocation.rewardLamports,
         rewardBps,
-        referenceMarketCapUsd: ref.marketCapUsd,
+        referenceMarketCapUsd: ref.ok ? ref.marketCapUsd : null,
         feesInWindowLamports: fees,
       },
     });

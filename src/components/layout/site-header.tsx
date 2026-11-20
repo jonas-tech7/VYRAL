@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { Logo } from "@/components/brand/logo";
 import { WalletButton } from "@/components/wallet/wallet-button";
 import { MobileNav, MobileNavPlaceholder, NavLinks, NavLinksStatic } from "./nav-links";
+import { OfficialToken } from "./official-token";
 
 export function SiteHeader() {
   return (
@@ -15,12 +16,18 @@ export function SiteHeader() {
           <NavLinks />
         </Suspense>
         <div className="ml-auto flex items-center gap-2">
+          <Suspense fallback={null}>
+            <OfficialToken variant="pill" />
+          </Suspense>
           <WalletButton />
           <Suspense fallback={<MobileNavPlaceholder />}>
             <MobileNav />
           </Suspense>
         </div>
       </nav>
+      <Suspense fallback={null}>
+        <OfficialToken variant="strip" />
+      </Suspense>
     </header>
   );
 }

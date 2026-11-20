@@ -5,11 +5,14 @@
  *
  * Nothing here is a market model or a protocol parameter.
  */
+import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
 import { fractalNoise, logUniform, unit } from "./random";
 
 export const SIM_TOTAL_SUPPLY = 1_000_000_000;
 /** Simulated creator-fee rate applied to simulated volume (mock fee provider only). */
 export const SIM_CREATOR_FEE_RATE = 0.003;
+/** The part of it that reaches the reward vault under the locked fee split (what a competition is funded with). */
+export const SIM_VAULT_FEE_RATE = SIM_CREATOR_FEE_RATE * (CREATOR_FEE_SPLIT.vaultBps / 10_000);
 
 const HOUR = 3_600_000;
 
