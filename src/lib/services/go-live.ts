@@ -6,7 +6,7 @@
  * Plus a readiness checklist of the production configuration.
  */
 import { AddressLookupTableProgram, Connection, Keypair, PublicKey, Transaction } from "@solana/web3.js";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { ApiError } from "@/lib/api/errors";
 import { db, schema } from "@/lib/db";
 import { env, isDemoMode, platformConfigured } from "@/lib/env";
@@ -19,6 +19,8 @@ import { audit } from "./audit";
 /** Any system account holding SOL can stand in as the deployer of a simulated launch. */
 const SIM_DEPLOYER = new PublicKey("5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9");
 const LUT_KEY = LOOKUP_TABLE_STATE_KEY;
+/** A lookup table whose creation started but did not finish; the next attempt continues with it. */
+const LUT_PENDING_KEY = `${LOOKUP_TABLE_STATE_KEY}:pending`;
 
 function connection() {
   if (!env.SOLANA_RPC_URL) throw new ApiError(400, "not_configured", "Set SOLANA_RPC_URL first.");
@@ -70,18 +72,57 @@ export async function createLookupTable(actor: string) {
     if (res.value.err) throw new ApiError(502, "transaction_failed", `Transaction failed: ${JSON.stringify(res.value.err)}`);
     return signature;
   };
-  const slot = await c.getSlot("finalized");
-  const [create, table] = AddressLookupTableProgram.createLookupTable({ authority: signer.publicKey, payer: signer.publicKey, recentSlot: slot });
-  await send(new Transaction().add(create));
-  for (let i = 0; i < accounts.length; i += 20) {
+  // A table created by an earlier attempt that stopped half-way is reused, so a retry never pays twice.
+  const [pendingRow] = await db.select().from(schema.workerState).where(eq(schema.workerState.key, LUT_PENDING_KEY));
+  const pendingAddress = (pendingRow?.value as { address?: string } | undefined)?.address;
+  let table = pendingAddress ? new PublicKey(pendingAddress) : null;
+  if (table && !(await c.getAddressLookupTable(table)).value) table = null;
+
+  if (!table) {
+    // The program only accepts a slot the validator still has in its recent slot hashes. RPC providers spread
+    // requests over nodes that can lag each other, so use a real (non-skipped) block ~100 slots behind the tip
+    // and retry with a fresh one if a node still disagrees.
+    for (let attempt = 1; ; attempt++) {
+      const tip = await c.getSlot("confirmed");
+      const blocks = await c.getBlocks(tip - 150, tip - 100, "confirmed");
+      const recentSlot = blocks.at(-1) ?? tip - 100;
+      const [create, address] = AddressLookupTableProgram.createLookupTable({ authority: signer.publicKey, payer: signer.publicKey, recentSlot });
+      try {
+        await send(new Transaction().add(create));
+        table = address;
+        break;
+      } catch (e) {
+        if (attempt >= 3 || !/not a recent slot/i.test(e instanceof Error ? e.message : String(e))) throw e;
+        await new Promise((r) => setTimeout(r, 2_000));
+      }
+    }
+    await db
+      .insert(schema.workerState)
+      .values({ key: LUT_PENDING_KEY, value: { address: table.toBase58() }, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: schema.workerState.key, set: { value: { address: table.toBase58() }, updatedAt: new Date() } });
+  }
+
+  // Add only the accounts the table does not hold yet (a new table becomes readable within a slot or two).
+  let present: PublicKey[] = [];
+  for (let i = 0; i < 10; i++) {
+    const state = (await c.getAddressLookupTable(table)).value;
+    if (state) {
+      present = state.state.addresses;
+      break;
+    }
+    await new Promise((r) => setTimeout(r, 1_000));
+  }
+  const missing = accounts.filter((a) => !present.some((p) => p.equals(a)));
+  for (let i = 0; i < missing.length; i += 20) {
     await send(
       new Transaction().add(
-        AddressLookupTableProgram.extendLookupTable({ lookupTable: table, authority: signer.publicKey, payer: signer.publicKey, addresses: accounts.slice(i, i + 20) }),
+        AddressLookupTableProgram.extendLookupTable({ lookupTable: table, authority: signer.publicKey, payer: signer.publicKey, addresses: missing.slice(i, i + 20) }),
       ),
     );
   }
   const address = table.toBase58();
   await db.transaction(async (tx) => {
+    await tx.delete(schema.workerState).where(eq(schema.workerState.key, LUT_PENDING_KEY));
     await tx
       .insert(schema.workerState)
       .values({ key: LUT_KEY, value: { address, accounts: accounts.length }, updatedAt: new Date() })
@@ -156,7 +197,7 @@ export async function resetForLaunch(actor: string, confirm: boolean) {
   await db.transaction(async (tx) => {
     await tx.execute(sql.raw(`TRUNCATE ${tables.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`));
     await tx.execute(sql`DELETE FROM users WHERE wallet NOT IN (SELECT wallet FROM admins)`);
-    await tx.execute(sql`DELETE FROM worker_state WHERE key <> ${LUT_KEY}`);
+    await tx.execute(sql`DELETE FROM worker_state WHERE key NOT IN (${LUT_KEY}, ${LUT_PENDING_KEY})`);
     await audit(tx, { actor, actorRole: "admin", action: "golive.reset_demo_data", targetType: "platform", targetId: "all", after: counts });
   });
   return { removed: true, counts };

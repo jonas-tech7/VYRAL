@@ -20,7 +20,9 @@ export function parseSecret(value: string): Keypair {
 
 export async function createLaunchLookupTable(connection: Connection, payer: Keypair, vault: PublicKey) {
   const accounts = await staticLaunchAccounts(connection, vault, CREATOR_FEE_SPLIT.vaultBps);
-  const slot = await connection.getSlot("finalized");
+  // A real block ~100 slots behind the tip: still in the recent slot hashes, even on a node that lags.
+  const tip = await connection.getSlot("confirmed");
+  const slot = (await connection.getBlocks(tip - 150, tip - 100, "confirmed")).at(-1) ?? tip - 100;
   const [create, table] = AddressLookupTableProgram.createLookupTable({ authority: payer.publicKey, payer: payer.publicKey, recentSlot: slot });
   await sendAndConfirmTransaction(connection, new Transaction().add(create), [payer], { commitment: "confirmed" });
   for (let i = 0; i < accounts.length; i += 20) {
