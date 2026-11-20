@@ -11,14 +11,21 @@ import { WalletModal } from "@/components/wallet/wallet-modal";
 function Wallets({ children }: { children: ReactNode }) {
   const toast = useToast();
   const endpoint = useMemo(() => {
-    const custom = process.env.NEXT_PUBLIC_SOLANA_RPC_URL;
-    const cluster = process.env.NEXT_PUBLIC_SOLANA_CLUSTER === "mainnet-beta" ? "mainnet-beta" : "devnet";
-    return custom && custom.length > 0 ? custom : clusterApiUrl(cluster);
+    // Tolerates stray spaces or quotes; anything that is not an http(s) URL falls back to the public endpoint.
+    const custom = (process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "").trim().replace(/^["']|["']$/g, "");
+    const cluster = (process.env.NEXT_PUBLIC_SOLANA_CLUSTER ?? "").trim() === "mainnet-beta" ? "mainnet-beta" : "devnet";
+    if (/^https?:\/\//.test(custom)) return custom;
+    if (custom) console.warn("NEXT_PUBLIC_SOLANA_RPC_URL must start with https://; using the public endpoint.");
+    return clusterApiUrl(cluster);
   }, []);
   const onError = useCallback(
     (error: WalletError) => {
       if (/reject|cancel|declin/i.test(error.message ?? "")) return;
-      toast.push({ tone: "negative", title: "Wallet error", description: error.message || error.name });
+      toast.push({
+        tone: "negative",
+        title: "Wallet error",
+        description: error.message || error.name,
+      });
     },
     [toast],
   );

@@ -25,11 +25,14 @@ function connection() {
   return new Connection(env.SOLANA_RPC_URL, "confirmed");
 }
 
+const isHttpUrl = (v: string | undefined) => /^https?:\/\//.test((v ?? "").trim());
+
 export async function readiness() {
   const lut = await lookupTableAddress().catch(() => null);
   const checks = [
     { label: "Solana mainnet", ok: env.SOLANA_CLUSTER === "mainnet-beta", detail: `SOLANA_CLUSTER=${env.SOLANA_CLUSTER}` },
-    { label: "Solana RPC", ok: Boolean(env.SOLANA_RPC_URL), detail: "SOLANA_RPC_URL" },
+    { label: "Solana RPC (server)", ok: isHttpUrl(env.SOLANA_RPC_URL), detail: "SOLANA_RPC_URL, must start with https://" },
+    { label: "Solana RPC (browser)", ok: isHttpUrl(process.env.NEXT_PUBLIC_SOLANA_RPC_URL), detail: "NEXT_PUBLIC_SOLANA_RPC_URL, must start with https://" },
     { label: "Reward vault", ok: Boolean(env.FEE_VAULT_ADDRESS && env.PAYOUT_SIGNER), detail: "FEE_VAULT_ADDRESS + PAYOUT_SIGNER" },
     { label: "pump.fun launches", ok: env.LAUNCH_PROVIDER === "pumpfun", detail: `LAUNCH_PROVIDER=${env.LAUNCH_PROVIDER}` },
     { label: "Launch lookup table", ok: Boolean(lut), detail: lut ?? "Create it below" },
