@@ -10,7 +10,7 @@ import { eq, sql } from "drizzle-orm";
 import { ApiError } from "@/lib/api/errors";
 import { db, schema } from "@/lib/db";
 import { env, isDemoMode, platformConfigured } from "@/lib/env";
-import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
+import { platformRecipients } from "@/lib/launch/recipients";
 import { LOOKUP_TABLE_STATE_KEY, lookupTableAddress } from "@/lib/launch/lookup-table";
 import { buildPumpFunLaunch, staticLaunchAccounts } from "@/lib/launch/pumpfun";
 import { vaultSigner } from "@/lib/providers/payouts";
@@ -36,6 +36,8 @@ export async function readiness() {
     { label: "Solana RPC (server)", ok: isHttpUrl(env.SOLANA_RPC_URL), detail: "SOLANA_RPC_URL, must start with https://" },
     { label: "Solana RPC (browser)", ok: isHttpUrl(process.env.NEXT_PUBLIC_SOLANA_RPC_URL), detail: "NEXT_PUBLIC_SOLANA_RPC_URL, must start with https://" },
     { label: "Reward vault", ok: Boolean(env.FEE_VAULT_ADDRESS && env.PAYOUT_SIGNER), detail: "FEE_VAULT_ADDRESS + PAYOUT_SIGNER" },
+    { label: "Platform wallet (buyback + treasury)", ok: Boolean(env.PLATFORM_FEE_ADDRESS && env.PLATFORM_SIGNER_SECRET_KEY), detail: "PLATFORM_FEE_ADDRESS + PLATFORM_SIGNER_SECRET_KEY" },
+    { label: "Treasury wallet", ok: Boolean(env.FEE_TREASURY_ADDRESS), detail: "FEE_TREASURY_ADDRESS" },
     { label: "pump.fun launches", ok: env.LAUNCH_PROVIDER === "pumpfun", detail: `LAUNCH_PROVIDER=${env.LAUNCH_PROVIDER}` },
     { label: "Launch lookup table", ok: Boolean(lut), detail: lut ?? "Create it below" },
     { label: "Fee distribution", ok: env.FEE_PROVIDER === "pumpfun", detail: `FEE_PROVIDER=${env.FEE_PROVIDER}` },
@@ -61,7 +63,7 @@ export async function createLookupTable(actor: string) {
   if (!env.FEE_VAULT_ADDRESS) throw new ApiError(400, "not_configured", "Set FEE_VAULT_ADDRESS first.");
   const c = connection();
   const signer = vaultSigner();
-  const accounts = await staticLaunchAccounts(c, new PublicKey(env.FEE_VAULT_ADDRESS), CREATOR_FEE_SPLIT.vaultBps);
+  const accounts = await staticLaunchAccounts(c, platformRecipients());
   const send = async (tx: Transaction) => {
     const { blockhash, lastValidBlockHeight } = await c.getLatestBlockhash("confirmed");
     tx.feePayer = signer.publicKey;
@@ -143,8 +145,7 @@ export async function simulateLaunch() {
   const built = await buildPumpFunLaunch(c, {
     mint: Keypair.generate().publicKey,
     deployer: SIM_DEPLOYER,
-    vault: new PublicKey(env.FEE_VAULT_ADDRESS),
-    vaultShareBps: CREATOR_FEE_SPLIT.vaultBps,
+    platform: platformRecipients(),
     name: "Simulated Coin",
     symbol: "SIMC",
     uri: new URL("/api/files/metadata/simulation.json", env.APP_URL).toString(),

@@ -66,7 +66,7 @@ export function GoLiveActions({ lookupTableReady, demoTokens }: { lookupTableRea
 
       <Step n={2} title="Test a launch against pump.fun">
         <p>
-          Builds a complete launch (coin, 50/50 fee split locked on-chain, 0.05 SOL initial buy) and simulates it on the live network. Nothing is signed
+          Builds a complete launch (coin, fee split locked on-chain, 0.05 SOL initial buy) and simulates it on the live network. Nothing is signed
           or sent, no coin is created and no funds move.
         </p>
         <Button className="mt-3" disabled={!lookupTableReady} loading={busy === "simulate_launch"} onClick={() => void run<Simulation>("simulate_launch", {}, setSim)}>

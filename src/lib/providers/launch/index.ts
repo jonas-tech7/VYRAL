@@ -19,9 +19,9 @@
  */
 import { randomBytes } from "node:crypto";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
-import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
 import { lookupTableAddress } from "@/lib/launch/lookup-table";
 import { buildPumpFunLaunch, verifyPumpFunLaunch } from "@/lib/launch/pumpfun";
+import { platformRecipients } from "@/lib/launch/recipients";
 import { env } from "@/lib/env";
 import { verifyWalletSignature } from "@/lib/solana/keys";
 
@@ -150,10 +150,6 @@ class PumpFunLaunchProvider implements LaunchProvider {
   /** Mint keypairs between reserveMint() and prepare() (same request); never persisted. */
   private reserved = new Map<string, { keypair: Keypair; at: number }>();
 
-  private vault() {
-    if (!env.FEE_VAULT_ADDRESS) throw new Error("FEE_VAULT_ADDRESS is required for pump.fun launches");
-    return new PublicKey(env.FEE_VAULT_ADDRESS);
-  }
 
   async reserveMint(): Promise<string> {
     const now = Date.now();
@@ -173,8 +169,7 @@ class PumpFunLaunchProvider implements LaunchProvider {
     const built = await buildPumpFunLaunch(this.connection, {
       mint: mint.publicKey,
       deployer: new PublicKey(input.deployer),
-      vault: this.vault(),
-      vaultShareBps: CREATOR_FEE_SPLIT.vaultBps,
+      platform: platformRecipients(),
       name: input.name,
       symbol: input.symbol,
       uri: input.metadataUri,
@@ -207,8 +202,7 @@ class PumpFunLaunchProvider implements LaunchProvider {
     const verified = await verifyPumpFunLaunch(this.connection, {
       mint: new PublicKey(prepared.mint),
       deployer: new PublicKey(deployer),
-      vault: this.vault(),
-      vaultShareBps: CREATOR_FEE_SPLIT.vaultBps,
+      platform: platformRecipients(),
     });
     if (!verified.ok) return { ok: false as const, error: verified.error };
     return { ok: true as const, launchSignature: signature, poolAddress: verified.bondingCurve };

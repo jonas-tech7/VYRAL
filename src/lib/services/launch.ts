@@ -3,7 +3,7 @@
  * in the same transaction that records the token, using the protocol
  * configuration shown to the deployer before signing.
  */
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { ApiError } from "@/lib/api/errors";
@@ -64,6 +64,12 @@ export const launchInputSchema = z.object({
 });
 export type LaunchInput = z.infer<typeof launchInputSchema>;
 
+const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+/** Random lowercase id (storage keys are lowercase; 12 chars ≈ 62 bits). */
+function shortId(n: number): string {
+  return Array.from(randomBytes(n), (b) => ALPHABET[b % 36]).join("");
+}
+
 export async function prepareLaunch(wallet: string, input: LaunchInput, viewer?: Viewer | null) {
   if (!launchesOpen) throw new ApiError(503, "launches_closed", "Launching opens soon.");
   if (input.official && !hasRole(viewer ?? null, "admin")) throw new ApiError(403, "forbidden", "Only administrators can launch the official coin.");
@@ -93,8 +99,11 @@ export async function prepareLaunch(wallet: string, input: LaunchInput, viewer?:
     links: input.links,
     vyralUrl,
   });
-  const stored = await storageProvider().put(`metadata/${randomUUID()}.json`, Buffer.from(JSON.stringify(metadata)), "application/json");
-  const metadataUri = absolute(stored.url);
+  // Short metadata link (makevyral.com/m/<12 chars>): the URI is part of the launch transaction, and every byte
+  // saved keeps the coin, its locked fee split and the deployer's first buy inside one transaction.
+  const metadataId = shortId(12);
+  const stored = await storageProvider().put(`m/${metadataId}.json`, Buffer.from(JSON.stringify(metadata)), "application/json");
+  const metadataUri = stored.url.startsWith("/api/files/") ? absolute(`/m/${metadataId}`) : stored.url;
 
   const prepared = await provider.prepare({
     deployer: wallet,

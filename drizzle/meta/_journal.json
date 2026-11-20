@@ -36,6 +36,13 @@
       "when": 1795121204817,
       "tag": "0004_payout_minimum_500",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795205919104,
+      "tag": "0005_buyback_events",
+      "breakpoints": true
     }
   ]
 }

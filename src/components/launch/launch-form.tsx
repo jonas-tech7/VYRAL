@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/components/wallet/auth-provider";
 import { api, ApiClientError } from "@/lib/client/api";
 import { bpsToPct, cn, fullNumber } from "@/lib/format";
+import { FeeSplitBar, FeeSplitLegend } from "@/components/fee-split";
 import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
 import { TERMS_VERSION } from "@/lib/legal";
 
@@ -61,6 +62,13 @@ function validUrl(v: string, hosts?: string[]) {
     return false;
   }
 }
+
+const competitionPct = bpsToPct(CREATOR_FEE_SPLIT.vaultBps);
+const deployerPct = bpsToPct(CREATOR_FEE_SPLIT.deployerBps);
+const buybackPct = bpsToPct(CREATOR_FEE_SPLIT.buybackBps);
+const treasuryPct = bpsToPct(CREATOR_FEE_SPLIT.treasuryBps);
+/** Name + ticker bytes up to which the first buy still fits in the launch transaction (measured on mainnet). */
+const SINGLE_TX_NAME_BYTES = 20;
 
 const PENDING_KEY = "vyral:pending-launch";
 type PendingLaunch = { launchId: string; signature: string };
@@ -403,7 +411,13 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
               label="Initial buy"
               htmlFor="initial-buy"
               optional
-              hint={config.simulated ? "Disabled in the demonstration environment." : "Bought for you right after the coin is created, in SOL."}
+              hint={
+                config.simulated
+                  ? "Disabled in the demonstration environment."
+                  : Number(initialBuy || 0) > 0 && new TextEncoder().encode(name.trim() + ticker).length > SINGLE_TX_NAME_BYTES
+                    ? "With a name this long, your buy is sent right after the launch instead of inside it, so someone could buy first. Shorten the name or ticker to keep it in the launch."
+                    : "Bought in the launch transaction itself, in SOL, so nobody can buy before you."
+              }
             >
               <Input
                 id="initial-buy"
@@ -445,28 +459,15 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
               Your coin launches on pump.fun. Its creator fees are split in the launch transaction and the split is locked on-chain: nobody, not you and not
               VYRAL, can change it afterwards.
             </p>
-            <div className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-overlay-2" aria-hidden>
-              <div className="h-full bg-accent" style={{ width: `${CREATOR_FEE_SPLIT.vaultBps / 100}%` }} />
-              <div className="h-full bg-ink-3" style={{ width: `${CREATOR_FEE_SPLIT.deployerBps / 100}%` }} />
-            </div>
-            <dl className="mt-3 divide-y divide-edge text-[12.5px]">
-              <div className="flex justify-between py-1.5">
-                <dt className="flex items-center gap-2 text-ink-2">
-                  <span className="size-2 rounded-full bg-accent" aria-hidden />
-                  Competition rewards
-                </dt>
-                <dd className="num text-ink">{bpsToPct(CREATOR_FEE_SPLIT.vaultBps)}</dd>
-              </div>
-              <div className="flex justify-between py-1.5">
-                <dt className="flex items-center gap-2 text-ink-2">
-                  <span className="size-2 rounded-full bg-ink-3" aria-hidden />
-                  You, the deployer
-                </dt>
-                <dd className="num text-ink">{bpsToPct(CREATOR_FEE_SPLIT.deployerBps)}</dd>
-              </div>
-            </dl>
+            <FeeSplitBar className="mt-4" />
+            <FeeSplitLegend described you className="mt-3" />
             <p className="mt-2 text-[12px] leading-relaxed text-ink-3">
               Your share is paid to your wallet by pump.fun directly. The competition share is paid out to the top eligible video at every checkpoint.
+              The buyback share buys and burns $VYRAL; every buy and burn is listed on the{" "}
+              <Link href="/burns" className="text-ink-2 underline decoration-edge-strong underline-offset-2 hover:text-ink">
+                Buyback &amp; burn
+              </Link>{" "}
+              page.
             </p>
           </div>
 
@@ -508,7 +509,7 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
             ) : null}
             <label className="flex cursor-pointer items-start gap-2.5 text-[12.5px] leading-relaxed text-ink-2">
               <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5 accent-[#2cf59e]" />
-              I reviewed the fee split and understand that half of this coin&apos;s creator fees fund its competition, locked on-chain at launch.
+              I reviewed the fee split ({competitionPct} competition, {deployerPct} to me, {buybackPct} $VYRAL buyback, {treasuryPct} VYRAL treasury) and understand it is locked on-chain at launch.
             </label>
             {errors.ack ? (
               <p className="mt-2 text-[12.5px] text-negative" role="alert">

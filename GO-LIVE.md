@@ -35,6 +35,9 @@ Vercel → dein Projekt → Settings → Environment Variables. Setze oder ände
 | `PAYOUT_SIGNER_SECRET_KEY` | Private Key aus Schritt 1 (als „Sensitive“ markieren) |
 | `PAYOUT_ALLOW_HOT_WALLET` | `true` |
 | `PAYOUT_MAX_LAMPORTS` | `5000000000` (= 5 SOL; größere Auszahlungen gehen nicht automatisch raus, siehe unten) |
+| `PLATFORM_FEE_ADDRESS` | Adresse einer **zweiten neuen Wallet** (Plattform-Wallet für Rückkauf + Treasury) |
+| `PLATFORM_SIGNER_SECRET_KEY` | Private Key dieser Plattform-Wallet (als „Sensitive“/Secret, nur Production) |
+| `FEE_TREASURY_ADDRESS` | Adresse deiner Treasury-Wallet (nur die Adresse; am besten eine sichere Wallet, z. B. Hardware-Wallet) |
 | `SEED_DEMO_DATA` | `false` |
 | `APP_URL` | `https://makevyral.com` |
 
@@ -46,7 +49,7 @@ Danach: **Deployments → Redeploy**.
 
 Melde dich mit deiner Admin-Wallet an und öffne **Admin → Go live**. Oben siehst du eine Checkliste, was noch fehlt. Dann der Reihe nach:
 
-1. **Create lookup table**: legt eine kleine Tabelle on-chain an, damit ein Launch samt gesperrtem 50/50-Split in eine Transaktion passt.
+1. **Create lookup table**: legt eine kleine Tabelle on-chain an, damit ein Launch samt gesperrtem Fee-Split in eine Transaktion passt.
 2. **Run test**: baut einen kompletten Launch und testet ihn gegen pump.fun, ohne etwas zu senden. Muss „OK“ zeigen.
 3. **Remove demonstration data**: löscht die Demo-Coins, -Videos und -Auszahlungen. Tippe dazu `REMOVE DEMO DATA` ein.
 
@@ -58,7 +61,8 @@ Wenn du ihn woanders launchst: **Admin → Overview → Official $VYRAL coin** u
 
 ## Wie das Geld fließt
 
-- Jeder Coin wird auf pump.fun erstellt. In derselben Transaktion werden seine Creator Fees **50/50** aufgeteilt und **on-chain gesperrt**: 50 % an den Reward-Vault, 50 % direkt an den Deployer. Niemand kann das danach ändern, auch du nicht.
+- Jeder Coin wird auf pump.fun erstellt. In derselben Transaktion werden seine Creator Fees aufgeteilt und **on-chain gesperrt**: **45 %** an den Reward-Vault (Wettbewerb), **25 %** direkt an den Deployer, **30 %** an die Plattform-Wallet. Niemand kann das danach ändern, auch du nicht.
+- Von allem, was auf der Plattform-Wallet ankommt, leitet die Seite automatisch **ein Drittel (= 10 % der Fees)** an deine Treasury weiter. Mit **zwei Dritteln (= 20 %)** kauft sie $VYRAL über Jupiter in kleinen Stücken (max. 0,5 SOL alle 10 Minuten, max. 1,5 % Preisbewegung pro Kauf) und **verbrennt** jeden gekauften Token. Bevor $VYRAL existiert, sammelt sich der Rückkauf-Anteil einfach an. Alles steht öffentlich auf der Seite **Buyback & burn** (`/burns`).
 - Alle 15 Minuten löst die Seite die Auszahlung der Fees jedes Coins bei pump.fun aus. Das darf jeder, auch der Deployer über pump.fun selbst. Die Seite liest deshalb alle Eingänge im Vault und schreibt jeden Vault-Anteil dem richtigen Coin gut, egal wer die Auszahlung ausgelöst hat.
 - An jedem Checkpoint (alle 3 oder 6 Stunden) bekommt das Video mit dem höchsten Viral Score (mindestens 500 Views) diesen Betrag in SOL auf seine Wallet. Gibt es noch kein berechtigtes Video, wird der Betrag zum nächsten Checkpoint mitgenommen.
 - Eine Auszahlung über `PAYOUT_MAX_LAMPORTS` wird nicht automatisch gesendet. Sie erscheint unter **Admin → Payouts** als „Requires attention“. Du schickst den Betrag selbst aus dem Vault-Wallet (z. B. mit Phantom) und trägst dort bei **Settle** die Transaktions-Signatur ein. Die Seite prüft die Überweisung on-chain.

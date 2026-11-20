@@ -28,7 +28,7 @@ export function RewardCurveEditor({ initial, version }: { initial: RewardCurveCo
       initial={initial}
       version={version}
       title="Reward curve"
-      description="Share of the fees a coin sends to the reward vault (its locked half of the creator fees) that the winner is paid, by reference market cap. Default: 100% at every market cap, which needs no price data. New launches use the latest version."
+      description="Share of the fees a coin sends to the reward vault (its locked competition share of the creator fees) that the winner is paid, by reference market cap. Default: 100% at every market cap, which needs no price data. New launches use the latest version."
       clientError={(c) => {
         for (let i = 1; i < c.points.length; i++) if (!(c.points[i].marketCapUsd > c.points[i - 1].marketCapUsd)) return "Market caps must increase from row to row.";
         if (c.points.some((p) => !(p.rewardBps >= 0 && p.rewardBps <= 10_000))) return "Shares must be between 0% and 100%.";
@@ -45,8 +45,13 @@ export function RewardCurveEditor({ initial, version }: { initial: RewardCurveCo
                 not set here.
               </li>
               <li>
-                <span className="num text-ink">{bpsToPct(CREATOR_FEE_SPLIT.vaultBps)}</span> to the reward vault. The curve below sets how much of this half the
-                winning video is paid. At the first point&apos;s share, the winner gets{" "}
+                <span className="num text-ink">{bpsToPct(CREATOR_FEE_SPLIT.buybackBps + CREATOR_FEE_SPLIT.treasuryBps)}</span> to the platform wallet:{" "}
+                {bpsToPct(CREATOR_FEE_SPLIT.buybackBps)} buys and burns $VYRAL, {bpsToPct(CREATOR_FEE_SPLIT.treasuryBps)} goes to the treasury. Locked at
+                launch; not set here.
+              </li>
+              <li>
+                <span className="num text-ink">{bpsToPct(CREATOR_FEE_SPLIT.vaultBps)}</span> to the reward vault. The curve below sets how much of this share
+                the winning video is paid. At the first point&apos;s share, the winner gets{" "}
                 <span className="num text-ink">{bpsToPct((CREATOR_FEE_SPLIT.vaultBps * (c.points[0]?.rewardBps ?? 0)) / 10_000)}</span> of all creator fees.
               </li>
             </ul>
@@ -56,7 +61,7 @@ export function RewardCurveEditor({ initial, version }: { initial: RewardCurveCo
               <thead>
                 <tr className="text-left text-[12px] text-ink-3">
                   <th className="pb-2 font-normal">Market cap (USD)</th>
-                  <th className="pb-2 font-normal">Share of the vault half</th>
+                  <th className="pb-2 font-normal">Share of the vault&apos;s part</th>
                   <th className="pb-2" />
                 </tr>
               </thead>

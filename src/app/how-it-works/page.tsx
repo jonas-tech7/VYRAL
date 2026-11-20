@@ -110,6 +110,8 @@ async function Content() {
   const intervals = payouts.value.allowedIntervalsHours.map((h) => `${h}h`).join(" or ");
   const vaultPct = bpsToPct(CREATOR_FEE_SPLIT.vaultBps);
   const deployerPct = bpsToPct(CREATOR_FEE_SPLIT.deployerBps);
+  const buybackPct = bpsToPct(CREATOR_FEE_SPLIT.buybackBps);
+  const treasuryPct = bpsToPct(CREATOR_FEE_SPLIT.treasuryBps);
 
   return (
     <div className="min-w-0 max-w-[820px]">
@@ -138,8 +140,9 @@ async function Content() {
         </p>
         <ul className="mt-4 flex list-disc flex-col gap-2 pl-5 marker:text-ink-4">
           <li>
-            <span className="text-ink">Fee split:</span> {vaultPct} of the coin&apos;s creator fees fund its competition and {deployerPct} go to the
-            deployer. The split is set in the launch transaction and locked on-chain, so it can&apos;t be changed later.
+            <span className="text-ink">Fee split:</span> {vaultPct} of the coin&apos;s creator fees fund its competition, {deployerPct} go to the
+            deployer, {buybackPct} buy and burn $VYRAL and {treasuryPct} go to the VYRAL treasury. The split is set in the launch transaction and
+            locked on-chain, so it can&apos;t be changed later.
           </li>
           <li>
             <span className="text-ink">Payout interval:</span> the deployer chooses whether rewards are paid every {intervals}. Shorter rounds pay smaller
@@ -292,17 +295,24 @@ async function Content() {
 
       <Section id="fees" index={7} title="Where the money comes from">
         <p>
-          Rewards come only from the creator fees a coin generates when it is traded on pump.fun. When the coin launches, those fees are split in two,
-          in the launch transaction itself:
+          Rewards come only from the creator fees a coin generates when it is traded on pump.fun. When the coin launches, those fees are split four
+          ways, in the launch transaction itself:
         </p>
-        <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-edge bg-edge">
+        <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-edge bg-edge sm:grid-cols-4">
           <Rule value={vaultPct} label="To the coin's competition, through VYRAL's reward vault" />
           <Rule value={deployerPct} label="To the deployer's wallet, paid directly by pump.fun" />
+          <Rule value={buybackPct} label="Buys $VYRAL on the open market and burns it" />
+          <Rule value={treasuryPct} label="To the VYRAL treasury: operations and development" />
         </div>
         <p className="mt-5">
           The split is locked on-chain: once the coin is live, neither the deployer nor VYRAL can change it, and VYRAL never holds the deployer&apos;s
-          half. Everything that reaches the vault for a coin funds that coin&apos;s competition: at each checkpoint, the top eligible video receives
+          share. Everything that reaches the vault for a coin funds that coin&apos;s competition: at each checkpoint, the top eligible video receives
           everything collected since the last payout. If no video is eligible, the fees roll over to the next checkpoint.
+        </p>
+        <p className="mt-3">
+          The buyback and treasury shares go to one VYRAL platform wallet. A third of what arrives there goes to the treasury; the rest buys $VYRAL in
+          small steps and every token bought is burned. Every buy and burn is public on the <A href="/burns">Buyback &amp; burn</A> page. The buyback
+          is a mechanism, not a promise about price, and $VYRAL gives no claim on VYRAL&apos;s revenue.
         </p>
         <p className="mt-3">
           Only fees that were actually collected and confirmed on-chain are used. Pending fees are never paid out, nothing is pre-funded, and nothing is

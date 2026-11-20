@@ -4,22 +4,30 @@ import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
 import { PUMP_LIMITS, shareholders, staticLaunchAccounts } from "@/lib/launch/pumpfun";
 
 describe("pump.fun launch", () => {
-  const vault = Keypair.generate().publicKey;
-  const deployer = Keypair.generate().publicKey;
+  const key = () => Keypair.generate().publicKey;
+  const platform = { vault: key(), platform: key() };
+  const deployer = key();
 
-  it("splits creator fees 50/50 between the reward vault and the deployer", () => {
-    expect(CREATOR_FEE_SPLIT.vaultBps + CREATOR_FEE_SPLIT.deployerBps).toBe(10_000);
-    const s = shareholders({ vault, deployer, vaultShareBps: CREATOR_FEE_SPLIT.vaultBps });
+  it("splits creator fees 45 / 25 / 30: competition, deployer, platform (10 treasury + 20 buyback)", () => {
+    const { vaultBps, deployerBps, treasuryBps, buybackBps } = CREATOR_FEE_SPLIT;
+    expect([vaultBps, deployerBps, treasuryBps, buybackBps]).toEqual([4_500, 2_500, 1_000, 2_000]);
+    const s = shareholders({ deployer, platform });
+    expect(s.map((x) => [x.address.toBase58(), x.shareBps])).toEqual([
+      [platform.vault.toBase58(), 4_500],
+      [deployer.toBase58(), 2_500],
+      [platform.platform.toBase58(), 3_000],
+    ]);
+  });
+
+  it("merges parts that go to the same wallet (pump.fun rejects duplicate shareholders)", () => {
+    const s = shareholders({ deployer: platform.platform, platform });
     expect(s).toHaveLength(2);
-    expect(s[0].address.equals(vault)).toBe(true);
-    expect(s[0].shareBps).toBe(5_000);
-    expect(s[1].address.equals(deployer)).toBe(true);
-    expect(s[1].shareBps).toBe(5_000);
+    expect(s.find((x) => x.address.equals(platform.platform))?.shareBps).toBe(5_500);
     expect(s.reduce((a, x) => a + x.shareBps, 0)).toBe(10_000);
   });
 
   it("puts only accounts shared by every launch into the lookup table", async () => {
-    const accounts = (await staticLaunchAccounts(null, vault, CREATOR_FEE_SPLIT.vaultBps)).map((k) => k.toBase58());
+    const accounts = (await staticLaunchAccounts(null, platform)).map((k) => k.toBase58());
     // Program ids verified against mainnet (simulation of create_v2 + create_fee_sharing_config).
     expect(accounts).toContain("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
     expect(accounts).toContain("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ");

@@ -12,6 +12,7 @@ const COLUMNS = [
       { href: "/explore", label: "Coins" },
       { href: "/competitions", label: "Competitions" },
       { href: "/creators", label: "Creator leaderboard" },
+      { href: "/burns", label: "Buyback & burn" },
     ],
   },
   {

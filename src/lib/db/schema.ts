@@ -664,6 +664,30 @@ export const rateLimits = pgTable(
 );
 
 /** Small key/value store for worker cursors (e.g. last processed signature). */
+/**
+ * The platform wallet's activity: forwarding the treasury's part of each
+ * deposit, and buying + burning the official coin with the rest.
+ */
+export const buybackKindEnum = pgEnum("buyback_kind", ["buyback", "treasury"]);
+export const buybackEvents = pgTable(
+  "buyback_events",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    kind: buybackKindEnum().notNull(),
+    /** SOL spent on the buy, or forwarded to the treasury. */
+    lamports: lamports().notNull(),
+    mint: text(),
+    /** Tokens burned, in base units (u64 as text). */
+    tokensBurned: text(),
+    decimals: integer(),
+    swapSignature: text().unique(),
+    burnSignature: text(),
+    transferSignature: text().unique(),
+    createdAt: tz().notNull().defaultNow(),
+  },
+  (t) => [index("buyback_events_created_idx").on(t.kind, t.createdAt)],
+);
+
 export const workerState = pgTable("worker_state", {
   key: text().primaryKey(),
   value: jsonb().$type<Record<string, unknown>>().notNull(),

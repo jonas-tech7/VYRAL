@@ -19,13 +19,13 @@ import { TokenAvatar } from "@/components/ui/token-avatar";
 import { db, schema } from "@/lib/db";
 import { PLATFORM_LABEL, PLATFORM_SHORT, PLATFORMS } from "@/lib/domain/platforms";
 import { env } from "@/lib/env";
+import { FeeSplitBar, FeeSplitLegend } from "@/components/fee-split";
 import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
 import { coinPageUrl } from "@/lib/launch/metadata";
 import { age, bpsToPct, compactNumber, dateTimeUtc, fullNumber, price, score, shortAddress, sol, solToUsd, timeAgo, usd } from "@/lib/format";
 import { getCompetitionDetail } from "@/lib/queries/public";
 
 const VAULT_PCT = bpsToPct(CREATOR_FEE_SPLIT.vaultBps);
-const DEPLOYER_PCT = bpsToPct(CREATOR_FEE_SPLIT.deployerBps);
 
 async function tokenMeta(mint: string) {
   "use cache";
@@ -191,28 +191,8 @@ async function Detail({ params, searchParams }: Pick<PageProps<"/competitions/[m
         <Panel title="Fee split" action={<span className="text-[12px] text-ink-3">Locked on-chain</span>} className="flex flex-col">
           <div className="px-5 pb-5 pt-4">
             <p className="text-[12px] text-ink-3">Share of this coin&apos;s creator fees</p>
-            <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-overlay-2" aria-hidden>
-              <div className="h-full bg-accent" style={{ width: `${CREATOR_FEE_SPLIT.vaultBps / 100}%` }} />
-              <div className="h-full bg-ink-3" style={{ width: `${CREATOR_FEE_SPLIT.deployerBps / 100}%` }} />
-            </div>
-            <dl className="mt-4 grid grid-cols-2 gap-4">
-              <div>
-                <dt className="flex items-center gap-2 text-[12px] text-ink-3">
-                  <span className="size-2 rounded-full bg-accent" aria-hidden />
-                  Competition rewards
-                </dt>
-                <dd className="num mt-1 text-[26px] font-semibold tracking-[-0.02em] text-ink">{VAULT_PCT}</dd>
-                <dd className="text-[12px] text-ink-3">Into the reward vault</dd>
-              </div>
-              <div>
-                <dt className="flex items-center gap-2 text-[12px] text-ink-3">
-                  <span className="size-2 rounded-full bg-ink-3" aria-hidden />
-                  Deployer
-                </dt>
-                <dd className="num mt-1 text-[26px] font-semibold tracking-[-0.02em] text-ink">{DEPLOYER_PCT}</dd>
-                <dd className="text-[12px] text-ink-3">Paid by pump.fun</dd>
-              </div>
-            </dl>
+            <FeeSplitBar className="mt-3" />
+            <FeeSplitLegend className="mt-3" />
           </div>
           <p className="mt-auto border-t border-edge px-5 py-3 text-[12px] leading-relaxed text-ink-3">
             The split was locked on pump.fun when the coin launched and can&apos;t be changed, not by the deployer and not by VYRAL.

@@ -69,6 +69,20 @@ const schema = z.object({
     .default("false")
     .transform((v) => v === "true"),
   PAYOUT_MAX_LAMPORTS: z.coerce.number().int().positive().default(5_000_000_000),
+  /**
+   * VYRAL platform wallet: receives the treasury + buyback parts of every coin's creator fees (locked at
+   * launch). The buyback job forwards the treasury's part to FEE_TREASURY_ADDRESS and burns the rest.
+   */
+  PLATFORM_FEE_ADDRESS: optionalString,
+  /** Secret key of the platform wallet (base58 or JSON array), so forwarding and buybacks run automatically. */
+  PLATFORM_SIGNER_SECRET_KEY: optionalString,
+  /** Where the treasury's part goes (any wallet; no key needed). */
+  FEE_TREASURY_ADDRESS: optionalString,
+  /** Most SOL one buyback run spends (default 0.5 SOL); larger balances are bought over several runs. */
+  BUYBACK_MAX_LAMPORTS_PER_RUN: z.coerce.number().int().positive().default(500_000_000),
+  /** A buy is skipped (or made smaller) when it would move the price more than this, in percent. */
+  BUYBACK_MAX_PRICE_IMPACT_PCT: z.coerce.number().positive().max(10).default(1.5),
+  JUPITER_SWAP_API_URL: z.string().url().default("https://lite-api.jup.ag/swap/v1"),
   EXTERNAL_LAUNCH_API_URL: optionalString,
   EXTERNAL_LAUNCH_API_KEY: optionalString,
   JUPITER_PRICE_API_URL: z.string().url().default("https://lite-api.jup.ag/price/v3"),
@@ -194,8 +208,8 @@ export function assertLiveConfig(): string[] {
   }
   if (env.FEE_PROVIDER === "onchain" && (!env.SOLANA_RPC_URL || !env.FEE_VAULT_ADDRESS))
     problems.push("FEE_PROVIDER=onchain requires SOLANA_RPC_URL and FEE_VAULT_ADDRESS");
-  if (env.LAUNCH_PROVIDER === "pumpfun" && (!env.SOLANA_RPC_URL || !env.FEE_VAULT_ADDRESS))
-    problems.push("LAUNCH_PROVIDER=pumpfun requires SOLANA_RPC_URL and FEE_VAULT_ADDRESS");
+  if (env.LAUNCH_PROVIDER === "pumpfun" && (!env.SOLANA_RPC_URL || !env.FEE_VAULT_ADDRESS || !env.PLATFORM_FEE_ADDRESS))
+    problems.push("LAUNCH_PROVIDER=pumpfun requires SOLANA_RPC_URL, FEE_VAULT_ADDRESS and PLATFORM_FEE_ADDRESS");
   if (env.FEE_PROVIDER === "pumpfun" && (!env.SOLANA_RPC_URL || !env.FEE_VAULT_ADDRESS || env.PAYOUT_EXECUTOR !== "solana"))
     problems.push("FEE_PROVIDER=pumpfun requires SOLANA_RPC_URL, FEE_VAULT_ADDRESS and PAYOUT_EXECUTOR=solana (the vault signs distributions)");
   if (env.LAUNCH_PROVIDER === "external" && !env.EXTERNAL_LAUNCH_API_URL)

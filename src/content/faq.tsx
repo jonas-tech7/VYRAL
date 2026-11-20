@@ -7,6 +7,8 @@ export type FaqItem = { id: string; q: string; a: () => ReactNode };
 
 const VAULT_PCT = bpsToPct(CREATOR_FEE_SPLIT.vaultBps);
 const DEPLOYER_PCT = bpsToPct(CREATOR_FEE_SPLIT.deployerBps);
+const BUYBACK_PCT = bpsToPct(CREATOR_FEE_SPLIT.buybackBps);
+const TREASURY_PCT = bpsToPct(CREATOR_FEE_SPLIT.treasuryBps);
 
 export const FAQ: FaqItem[] = [
   {
@@ -48,9 +50,23 @@ export const FAQ: FaqItem[] = [
     a: () => (
       <p>
         Every token&apos;s pump.fun creator fees are split in its launch transaction: {VAULT_PCT} go to VYRAL&apos;s reward vault and fund the
-        token&apos;s competition, and {DEPLOYER_PCT} go to the deployer&apos;s wallet. The deployer&apos;s share is paid by pump.fun directly; VYRAL
-        never holds it. The split is locked on-chain, so neither the deployer nor VYRAL can change it later. At every checkpoint, the top eligible video
+        token&apos;s competition, {DEPLOYER_PCT} go to the deployer&apos;s wallet, {BUYBACK_PCT} buy and burn $VYRAL and {TREASURY_PCT} go to the
+        VYRAL treasury. The deployer&apos;s share is paid by pump.fun directly; VYRAL never holds it. The split is locked on-chain, so neither the
+        deployer nor VYRAL can change it later. At every checkpoint, the top eligible video
         receives all of the token&apos;s confirmed fees in the vault that haven&apos;t been paid out yet. <Link href="/docs/fees">Fees &amp; payouts</Link>
+      </p>
+    ),
+  },
+  {
+    id: "buyback",
+    q: "What is the $VYRAL buyback and burn?",
+    a: () => (
+      <p>
+        {BUYBACK_PCT} of every token&apos;s creator fees buy $VYRAL, the platform&apos;s own coin, on the open market, and every token bought is burned.
+        The buyback and treasury shares go to one VYRAL platform wallet; a third of each deposit goes to the treasury and the rest is spent on
+        buybacks in small steps, so a single buy never moves the price much. Every buy and burn is listed with its transactions on the{" "}
+        <Link href="/burns">Buyback &amp; burn</Link> page. The buyback is a mechanism, not a promise about price: $VYRAL is not an investment and
+        gives no claim on VYRAL&apos;s revenue, no ownership and no voting rights.
       </p>
     ),
   },

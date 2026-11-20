@@ -101,7 +101,7 @@ export const DEFAULT_CONFIG: ConfigShapes = {
   },
   /**
    * Share of the fees that reach the reward vault which is paid to creators.
-   * The vault only ever receives the competition's half of a coin's creator
+   * The vault only ever receives the competition's share of a coin's creator
    * fees (split locked on pump.fun at launch, see lib/launch/fee-split.ts),
    * so all of it funds rewards.
    */

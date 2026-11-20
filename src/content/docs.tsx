@@ -8,6 +8,9 @@ export type DocPage = { slug: string; title: string; description: string; body: 
 
 const VAULT_PCT = bpsToPct(CREATOR_FEE_SPLIT.vaultBps);
 const DEPLOYER_PCT = bpsToPct(CREATOR_FEE_SPLIT.deployerBps);
+const BUYBACK_PCT = bpsToPct(CREATOR_FEE_SPLIT.buybackBps);
+const TREASURY_PCT = bpsToPct(CREATOR_FEE_SPLIT.treasuryBps);
+const PLATFORM_PCT = bpsToPct(CREATOR_FEE_SPLIT.buybackBps + CREATOR_FEE_SPLIT.treasuryBps);
 
 function Live({ children }: { children: ReactNode }) {
   return <Suspense fallback={<p className="text-[13px] text-ink-4">Loading live configuration…</p>}>{children}</Suspense>;
@@ -35,8 +38,9 @@ const overview: DocPage = {
       <h2 id="loop">The loop</h2>
       <ol>
         <li>
-          <strong>Launch.</strong> A deployer launches a coin on pump.fun. The launch transaction splits the coin&apos;s creator fees, {VAULT_PCT} to
-          its competition and {DEPLOYER_PCT} to the deployer, and locks the split on-chain. VYRAL verifies the launch and opens the competition in the
+          <strong>Launch.</strong> A deployer launches a coin on pump.fun. The launch transaction splits the coin&apos;s creator fees ({VAULT_PCT} to
+          its competition, {DEPLOYER_PCT} to the deployer, {PLATFORM_PCT} to VYRAL&apos;s platform wallet for the $VYRAL buyback and the treasury)
+          and locks the split on-chain. VYRAL verifies the launch and opens the competition in the
           same step that records the coin.
         </li>
         <li>
@@ -87,15 +91,16 @@ const launching: DocPage = {
       <h2 id="fixed">Fixed parameters</h2>
       <p>
         Supply (1,000,000,000) and decimals (6) are set by the launch program, and mint authority is revoked at launch. The creator-fee split is fixed
-        as well: {VAULT_PCT} to the coin&apos;s competition and {DEPLOYER_PCT} to you, locked on-chain in the launch transaction (see{" "}
+        as well: {VAULT_PCT} to the coin&apos;s competition, {DEPLOYER_PCT} to you, {BUYBACK_PCT} to the $VYRAL buyback and {TREASURY_PCT} to the
+        VYRAL treasury, locked on-chain in the launch transaction (see{" "}
         <Link href="/docs/fees">Fees &amp; payouts</Link>). The eligibility rules in force at launch are copied into the competition; administrators can
         update them later, and every change is logged.
       </p>
       <h2 id="signing">Signing</h2>
       <p>
         The server prepares the launch transaction and signs it for the new mint; your wallet signs and sends it. The transaction creates the coin on
-        pump.fun, makes pump.fun&apos;s fee-sharing configuration the coin&apos;s creator, sets the two shares ({VAULT_PCT} to VYRAL&apos;s reward vault,{" "}
-        {DEPLOYER_PCT} to your wallet) and revokes the configuration&apos;s admin. Because the mint&apos;s signature covers the whole transaction, the
+        pump.fun, makes pump.fun&apos;s fee-sharing configuration the coin&apos;s creator, sets the shares ({VAULT_PCT} to VYRAL&apos;s reward vault,{" "}
+        {DEPLOYER_PCT} to your wallet, {PLATFORM_PCT} to VYRAL&apos;s platform wallet) and revokes the configuration&apos;s admin. Because the mint&apos;s signature covers the whole transaction, the
         split cannot be removed or altered without invalidating it.
       </p>
       <p>
@@ -508,10 +513,17 @@ const fees: DocPage = {
         The competition&apos;s {VAULT_PCT} is recorded for the coin and all of it funds that coin&apos;s competition. The deployer&apos;s {DEPLOYER_PCT}{" "}
         never passes through VYRAL: pump.fun pays it to the deployer&apos;s wallet directly, so VYRAL cannot hold, delay or redirect it.
       </p>
+      <p>
+        The buyback ({BUYBACK_PCT}) and treasury ({TREASURY_PCT}) shares are locked to one VYRAL platform wallet, which keeps the launch, its split and
+        the deployer&apos;s first buy inside one transaction. A job splits every deposit to that wallet: a third is forwarded to the treasury, the rest
+        buys $VYRAL through Jupiter in steps that stay under a price-impact limit, and every token bought is burned. Each buy, burn and transfer is
+        listed with its transaction on the <Link href="/burns">Buyback &amp; burn</Link> page. The buyback spends fees that have already been
+        collected; it is not a promise about price, and $VYRAL gives no claim on VYRAL&apos;s revenue.
+      </p>
       <h2 id="locked">Locked on-chain</h2>
       <p>
         The split is part of the launch transaction. The transaction that creates the coin also makes pump.fun&apos;s fee-sharing configuration the
-        coin&apos;s creator, sets the two shares and revokes the configuration&apos;s admin. With the admin revoked, nobody (not the deployer, not
+        coin&apos;s creator, sets the shares and revokes the configuration&apos;s admin. With the admin revoked, nobody (not the deployer, not
         VYRAL) can change the shares. VYRAL verifies all of this on-chain before it opens the coin&apos;s competition, and because the fee-sharing
         configuration is a public account, anyone can check it.
       </p>

@@ -170,11 +170,13 @@ export async function LivePayouts() {
 export function FeeSplit() {
   const rows = [
     { bps: CREATOR_FEE_SPLIT.vaultBps, dot: "bg-accent", to: "VYRAL's reward vault, for the coin's competition" },
-    { bps: CREATOR_FEE_SPLIT.deployerBps, dot: "bg-ink-3", to: "The deployer's wallet" },
+    { bps: CREATOR_FEE_SPLIT.deployerBps, dot: "bg-ink-2", to: "The deployer's wallet" },
+    { bps: CREATOR_FEE_SPLIT.buybackBps, dot: "bg-ink-3", to: "VYRAL's platform wallet: buys and burns $VYRAL" },
+    { bps: CREATOR_FEE_SPLIT.treasuryBps, dot: "bg-ink-4", to: "VYRAL's platform wallet: forwarded to the treasury" },
   ];
   return (
     <div>
-      <div className="my-4 flex h-2.5 overflow-hidden rounded-full bg-overlay-2" aria-hidden>
+      <div className="my-4 flex h-2.5 gap-px overflow-hidden rounded-full bg-overlay-2" aria-hidden>
         {rows.map((r) => (
           <div key={r.dot} className={`h-full ${r.dot}`} style={{ width: `${r.bps / 100}%` }} />
         ))}

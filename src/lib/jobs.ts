@@ -12,6 +12,7 @@ import { pruneSessions } from "@/lib/auth/session";
 import { pruneNonces } from "@/lib/auth/siws";
 import { db, pool, schema } from "@/lib/db";
 import { pruneRateLimits } from "@/lib/security/rate-limit";
+import { runBuyback } from "@/lib/services/buyback";
 import { processDueCheckpoints } from "@/lib/services/checkpoints";
 import { syncFees } from "@/lib/services/fees";
 import { prunePriceSamples, samplePrices } from "@/lib/services/market";
@@ -27,6 +28,7 @@ export const JOBS: Job[] = [
   { name: "sync-metrics", everyMs: 120_000, run: () => syncMetrics() },
   { name: "checkpoints", everyMs: 30_000, run: async () => ({ processed: (await processDueCheckpoints()).length }) },
   { name: "payouts", everyMs: 15_000, run: () => executePayouts() },
+  { name: "buyback", everyMs: 10 * 60_000, run: () => runBuyback() },
   {
     name: "maintenance",
     everyMs: 3_600_000,

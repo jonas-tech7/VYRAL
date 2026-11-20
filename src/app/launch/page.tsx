@@ -19,7 +19,7 @@ export default function LaunchPage() {
     <Container>
       <PageHeader
         title="Launch a coin"
-        description="Every coin launched on VYRAL goes live on pump.fun with its own video competition. Half of its creator fees fund the competition, locked on-chain."
+        description="Every coin launched on VYRAL goes live on pump.fun with its own video competition. The creator-fee split is locked on-chain at launch: 45% to the competition, 25% to you, 20% buys and burns $VYRAL, 10% to the VYRAL treasury."
       />
       <Suspense fallback={<Skeleton className="h-[720px] w-full" />}>
         <LaunchContent />

@@ -34,13 +34,15 @@ import {
   getBuyV3TokenAmountFromQuoteAmount,
   newBondingCurve,
 } from "@pump-fun/pump-sdk";
+import { CREATOR_FEE_SPLIT, type FeeSplit } from "./fee-split";
 
 export type PumpFunLaunchParams = {
   mint: PublicKey;
   deployer: PublicKey;
-  vault: PublicKey;
-  /** Share of creator fees routed to the reward vault, in basis points. */
-  vaultShareBps: number;
+  /** VYRAL's fee recipients: the competition vault and the platform wallet (treasury + buyback). */
+  platform: PlatformRecipients;
+  /** Defaults to CREATOR_FEE_SPLIT. */
+  split?: FeeSplit;
   name: string;
   symbol: string;
   uri: string;
@@ -56,11 +58,28 @@ export const PUMP_LIMITS = { name: 32, symbol: 13, uri: 200 };
 const COMPUTE_UNITS = 600_000;
 const PRIORITY_MICRO_LAMPORTS = 50_000;
 
-export function shareholders(p: Pick<PumpFunLaunchParams, "vault" | "deployer" | "vaultShareBps">) {
-  return [
-    { address: p.vault, shareBps: p.vaultShareBps },
-    { address: p.deployer, shareBps: 10_000 - p.vaultShareBps },
+export type PlatformRecipients = { vault: PublicKey; platform: PublicKey };
+
+/**
+ * The locked shareholders: competition vault, deployer, and VYRAL's platform
+ * wallet for the treasury and buyback parts. pump.fun rejects duplicate
+ * addresses, so parts that go to the same wallet are merged into one entry.
+ */
+export function shareholders(p: Pick<PumpFunLaunchParams, "deployer" | "platform" | "split">) {
+  const split = p.split ?? CREATOR_FEE_SPLIT;
+  const parts: Array<[PublicKey, number]> = [
+    [p.platform.vault, split.vaultBps],
+    [p.deployer, split.deployerBps],
+    [p.platform.platform, split.treasuryBps + split.buybackBps],
   ];
+  const merged: Array<{ address: PublicKey; shareBps: number }> = [];
+  for (const [address, shareBps] of parts) {
+    if (shareBps <= 0) continue;
+    const existing = merged.find((m) => m.address.equals(address));
+    if (existing) existing.shareBps += shareBps;
+    else merged.push({ address, shareBps });
+  }
+  return merged;
 }
 
 async function launchInstructions(connection: Connection | null, p: PumpFunLaunchParams) {
@@ -68,8 +87,9 @@ async function launchInstructions(connection: Connection | null, p: PumpFunLaunc
   if (bytes(p.name) > PUMP_LIMITS.name || bytes(p.symbol) > PUMP_LIMITS.symbol || bytes(p.uri) > PUMP_LIMITS.uri) {
     throw new Error("Name, ticker or metadata link is too long for pump.fun.");
   }
-  if (!(p.vaultShareBps > 0 && p.vaultShareBps < 10_000)) throw new Error("Invalid fee split.");
-  if (p.vault.equals(p.deployer)) throw new Error("The deployer wallet cannot be the reward vault.");
+  const split = p.split ?? CREATOR_FEE_SPLIT;
+  if (split.vaultBps + split.deployerBps + split.treasuryBps + split.buybackBps !== 10_000 || split.vaultBps <= 0) throw new Error("Invalid fee split.");
+  if (p.platform.vault.equals(p.deployer)) throw new Error("The deployer wallet cannot be the reward vault.");
 
   const ixs: TransactionInstruction[] = [
     ComputeBudgetProgram.setComputeUnitLimit({ units: COMPUTE_UNITS }),
@@ -162,13 +182,12 @@ export async function buildPumpFunLaunch(connection: Connection, p: PumpFunLaunc
  * different coins and deployers and keeping what they share, so the list
  * follows the SDK if pump.fun changes its account layout.
  */
-export async function staticLaunchAccounts(connection: Connection | null, vault: PublicKey, vaultShareBps: number): Promise<PublicKey[]> {
+export async function staticLaunchAccounts(connection: Connection | null, platform: PlatformRecipients): Promise<PublicKey[]> {
   const sample = async () =>
     launchInstructions(connection, {
       mint: Keypair.generate().publicKey,
       deployer: Keypair.generate().publicKey,
-      vault,
-      vaultShareBps,
+      platform,
       name: "x",
       symbol: "X",
       uri: "https://x",
@@ -199,11 +218,11 @@ export type PumpFunVerification = { ok: true; bondingCurve: string } | { ok: fal
 /**
  * Verifies a confirmed launch on-chain: the coin exists, its creator is the
  * fee sharing config, the admin is revoked and the shareholders are exactly
- * vault X% / deployer (100 - X)%.
+ * VYRAL's split (CREATOR_FEE_SPLIT) for this deployer.
  */
 export async function verifyPumpFunLaunch(
   connection: Connection,
-  p: Pick<PumpFunLaunchParams, "mint" | "deployer" | "vault" | "vaultShareBps">,
+  p: Pick<PumpFunLaunchParams, "mint" | "deployer" | "platform" | "split">,
 ): Promise<PumpFunVerification> {
   const online = new OnlinePumpSdk(connection);
   const sharing = feeSharingConfigPda(p.mint);
