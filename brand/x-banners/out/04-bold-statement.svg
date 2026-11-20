@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="500" viewBox="0 0 1500 500">
+  <defs>
+    <clipPath id="left"><rect width="750" height="500"/></clipPath>
+    <clipPath id="right"><rect x="750" width="750" height="500"/></clipPath>
+  </defs>
+  <rect width="750" height="500" fill="#fff"/>
+  <rect x="750" width="750" height="500" fill="#000"/>
+  <g clip-path="url(#left)" fill="#000"><path d="M506.47 -256L609.65 -90.86L506.47 74.28L403.28 -90.86Z"/><path d="M993.51 -256L1096.7 -90.86L993.51 74.28L890.33 -90.86Z"/><path d="M628.23 -61.14L731.41 104L628.23 269.14L525.04 104Z"/><path d="M871.75 -61.14L974.94 104L871.75 269.14L768.57 104Z"/><path d="M749.99 133.72L853.18 298.86L749.99 464L646.8 298.86Z"/></g>
+  <g clip-path="url(#right)" fill="#fff"><path d="M506.47 -256L609.65 -90.86L506.47 74.28L403.28 -90.86Z"/><path d="M993.51 -256L1096.7 -90.86L993.51 74.28L890.33 -90.86Z"/><path d="M628.23 -61.14L731.41 104L628.23 269.14L525.04 104Z"/><path d="M871.75 -61.14L974.94 104L871.75 269.14L768.57 104Z"/><path d="M749.99 133.72L853.18 298.86L749.99 464L646.8 298.86Z"/></g>
+  <text x="1368" y="84" fill="#fff" font-family="Geist" font-weight="600" font-size="30" letter-spacing="4.8" text-anchor="end">VYRAL</text>
+  <text x="1368" y="112" fill="#8a8a8a" font-family="GeistMono" font-size="12" letter-spacing="0.96" text-anchor="end">THE VIRAL LAUNCHPAD</text></svg>
