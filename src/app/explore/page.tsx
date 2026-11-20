@@ -13,7 +13,7 @@ import { age, compactNumber, price, usd } from "@/lib/format";
 import { listTokens, TOKEN_SORTS, type TokenSort } from "@/lib/queries/public";
 
 export const metadata: Metadata = {
-  title: "Explore tokens",
+  title: "Coins",
   description: "Browse every token launched on VYRAL by trend, age, market cap and volume.",
 };
 
@@ -29,7 +29,7 @@ const PAGE_SIZE = 30;
 export default function ExplorePage(props: PageProps<"/explore">) {
   return (
     <Container>
-      <PageHeader title="Explore" description="Every token launched on VYRAL, with live market data. Open a token for its chart, trading links and competition." />
+      <PageHeader title="Coins" description="Every coin launched on VYRAL, with live market data. Open a coin for its chart, trading links and competition." />
       <Suspense
         fallback={
           <>

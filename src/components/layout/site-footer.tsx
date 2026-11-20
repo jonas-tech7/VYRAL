@@ -9,7 +9,7 @@ const COLUMNS = [
     links: [
       { href: "/how-it-works", label: "How it works" },
       { href: "/launch", label: "Launch a coin" },
-      { href: "/explore", label: "Explore tokens" },
+      { href: "/explore", label: "Coins" },
       { href: "/competitions", label: "Competitions" },
       { href: "/creators", label: "Creator leaderboard" },
     ],

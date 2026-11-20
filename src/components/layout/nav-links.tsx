@@ -9,7 +9,7 @@ import { cn } from "@/lib/format";
 export const NAV = [
   { href: "/how-it-works", label: "How it works" },
   { href: "/launch", label: "Launch" },
-  { href: "/explore", label: "Explore" },
+  { href: "/explore", label: "Coins" },
   { href: "/competitions", label: "Competitions" },
   { href: "/creators", label: "Creators" },
   { href: "/faq", label: "FAQ" },

@@ -58,7 +58,7 @@ async function TokenDetail({ params }: Pick<PageProps<"/token/[mint]">, "params"
     <div className="animate-fade-in">
       <nav aria-label="Breadcrumb" className="pt-8 text-[12.5px] text-ink-3">
         <Link href="/explore" className="hover:text-ink">
-          Explore
+          Coins
         </Link>
         <span className="mx-2 text-ink-4">/</span>
         <span className="text-ink-2">${d.symbol}</span>
