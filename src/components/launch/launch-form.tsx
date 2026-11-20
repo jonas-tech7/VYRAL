@@ -62,8 +62,41 @@ function validUrl(v: string, hosts?: string[]) {
   }
 }
 
+const PENDING_KEY = "vyral:pending-launch";
+type PendingLaunch = { launchId: string; signature: string };
+
+/** A launch that was sent but not registered yet; remembered so a reload can finish it. */
+function savePending(p: PendingLaunch | null) {
+  try {
+    if (p) window.localStorage.setItem(PENDING_KEY, JSON.stringify(p));
+    else window.localStorage.removeItem(PENDING_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 export function LaunchForm({ config }: { config: LaunchConfig }) {
   const router = useRouter();
+
+  // Finish a launch whose registration did not complete (closed tab, slow network): the coin exists on-chain.
+  useEffect(() => {
+    let pending: PendingLaunch | null = null;
+    try {
+      pending = JSON.parse(window.localStorage.getItem(PENDING_KEY) ?? "null") as PendingLaunch | null;
+    } catch {
+      pending = null;
+    }
+    if (!pending?.launchId || !pending.signature) return;
+    api<{ mint: string }>("/api/launch/confirm", { body: pending })
+      .then((r) => {
+        savePending(null);
+        router.push(`/competitions/${r.mint}?launched=1`);
+      })
+      .catch((err) => {
+        // Keep it only while the chain might still confirm it; drop it once it is definitely invalid.
+        if (err instanceof ApiClientError && err.code !== "launch_not_verified" && err.code !== "unauthorized") savePending(null);
+      });
+  }, [router]);
   const toast = useToast();
   const { ensureSignedIn, signText, wallet } = useAuth();
   const { sendTransaction, signAllTransactions } = useWallet();
@@ -130,6 +163,18 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
     return e;
   }
 
+  /** Polls until the transaction is confirmed (throws if it failed on-chain or did not land within ~90 s). */
+  async function waitForLanding(sig: string) {
+    for (let i = 0; i < 45; i++) {
+      const { value } = await connection.getSignatureStatuses([sig], { searchTransactionHistory: true });
+      const st = value[0];
+      if (st?.err) throw new Error("The launch transaction failed on-chain. Nothing was created; only the network fee was spent.");
+      if (st && (st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized")) return;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    throw new Error("The launch transaction has not landed yet. If it does, your coin will be live; check your wallet before trying again.");
+  }
+
   async function launch() {
     const e = validate();
     setErrors(e);
@@ -177,8 +222,7 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
           // One wallet prompt: the launch first, then the initial buy once the coin exists.
           const [signedLaunch, ...signedRest] = await signAllTransactions([tx, ...followUp]);
           signature = await connection.sendRawTransaction(signedLaunch.serialize());
-          const latest = await connection.getLatestBlockhash("confirmed");
-          await connection.confirmTransaction({ signature, ...latest }, "confirmed");
+          await waitForLanding(signature);
           for (const t of signedRest) {
             try {
               await connection.sendRawTransaction(t.serialize());
@@ -189,24 +233,27 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
         } else {
           signature = await sendTransaction(tx, connection);
           for (const t of followUp) {
-            await connection.confirmTransaction(signature, "confirmed");
+            await waitForLanding(signature);
             await sendTransaction(t, connection).catch(() =>
               toast.push({ tone: "neutral", title: "Initial buy not sent", description: "Your coin is live; you can buy it on its token page." }),
             );
           }
         }
+        // Wait until the launch has landed before VYRAL verifies it (busy network: up to ~90 s).
+        await waitForLanding(signature);
       } else {
         throw new Error("Launch could not be prepared.");
       }
 
       setStep("confirm");
+      savePending({ launchId: prepared.launchId, signature });
       let result: { mint: string } | null = null;
-      for (let i = 0; i < 6 && !result; i++) {
+      for (let i = 0; i < 20 && !result; i++) {
         try {
           result = await api<{ mint: string }>("/api/launch/confirm", { body: { launchId: prepared.launchId, signature } });
         } catch (err) {
-          // Live launches may need a few seconds to land before verification succeeds.
-          if (prepared.mode === "transaction" && err instanceof ApiClientError && err.code === "launch_not_verified" && i < 5) {
+          // The server's RPC node can see the transaction a little later than the browser's.
+          if (prepared.mode === "transaction" && err instanceof ApiClientError && err.code === "launch_not_verified" && i < 19) {
             await new Promise((r) => setTimeout(r, 2500));
             continue;
           }
@@ -214,6 +261,7 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
         }
       }
       toast.push({ tone: "positive", title: `$${ticker} is live`, description: "Its competition is open for submissions." });
+      savePending(null);
       router.push(`/competitions/${result!.mint}?launched=1`);
     } catch (err) {
       setStep("idle");

@@ -136,7 +136,9 @@ export async function confirmLaunch(wallet: string, launchId: string, signature:
   if (!req || req.deployerWallet !== wallet) throw new ApiError(404, "not_found", "Launch request not found.");
   if (req.status === "confirmed") return { mint: req.mint, alreadyConfirmed: true };
   if (req.status !== "prepared") throw new ApiError(409, "invalid_state", "This launch request can no longer be confirmed.");
-  if (req.expiresAt < new Date()) {
+  // The expiry limits how long a launch can be SIGNED. A transaction that landed is verified on-chain below
+  // (mint key, deployer and locked split), so a slow wallet prompt must not orphan a coin that already exists.
+  if (req.expiresAt < new Date() && !req.transaction) {
     await db.update(schema.launchRequests).set({ status: "expired" }).where(eq(schema.launchRequests.id, launchId));
     throw new ApiError(410, "expired", "This launch request expired. Start again.");
   }

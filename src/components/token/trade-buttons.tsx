@@ -29,8 +29,8 @@ type Venue = "Jupiter" | "pump.fun";
 type Side = "Buy" | "Sell" | "Trade";
 
 /**
- * Buy / Sell on Jupiter, plus the coin's page on pump.fun for coins launched
- * there. Before the first trade (per Terms version and browser), the user
+ * Buy / Sell: on pump.fun for coins launched there (Jupiter as an alternative),
+ * otherwise on Jupiter. Before the first trade (per Terms version and browser), the user
  * confirms they understand the risks and that the trade happens on a
  * third-party service, not on VYRAL.
  */
@@ -48,15 +48,16 @@ export function TradeButtons({ buyUrl, sellUrl, pumpUrl, symbol }: { buyUrl: str
 
   return (
     <>
-      <button type="button" onClick={() => start(buyUrl, "Buy")} className={buttonClass("primary", "md")}>
+      {/* Coins launched on pump.fun trade natively there (bonding curve, then its AMM); Jupiter as an alternative. */}
+      <button type="button" onClick={() => (pumpUrl ? start(pumpUrl, "Buy", "pump.fun") : start(buyUrl, "Buy"))} className={buttonClass("primary", "md")}>
         Buy <ArrowUpRight className="size-3.5" />
       </button>
-      <button type="button" onClick={() => start(sellUrl, "Sell")} className={buttonClass("secondary", "md")}>
+      <button type="button" onClick={() => (pumpUrl ? start(pumpUrl, "Sell", "pump.fun") : start(sellUrl, "Sell"))} className={buttonClass("secondary", "md")}>
         Sell <ArrowUpRight className="size-3.5" />
       </button>
       {pumpUrl ? (
-        <button type="button" onClick={() => start(pumpUrl, "Trade", "pump.fun")} className={buttonClass("secondary", "md")}>
-          pump.fun <ArrowUpRight className="size-3.5" />
+        <button type="button" onClick={() => start(buyUrl, "Trade")} className={buttonClass("secondary", "md")}>
+          Jupiter <ArrowUpRight className="size-3.5" />
         </button>
       ) : null}
       <Dialog
