@@ -32,7 +32,7 @@ export function SignInPrompt() {
   );
 }
 
-export function LinkAccountControl({ platform, mode, oauthReady, linkedId }: { platform: Platform; mode: "mock" | "live"; oauthReady: boolean; linkedId: string | null }) {
+export function LinkAccountControl({ platform, mode, oauthReady, linkedId }: { platform: Platform; mode: "mock" | "live" | "closed"; oauthReady: boolean; linkedId: string | null }) {
   const router = useRouter();
   const toast = useToast();
   const [handle, setHandle] = useState("");
@@ -76,6 +76,7 @@ export function LinkAccountControl({ platform, mode, oauthReady, linkedId }: { p
       </Button>
     );
   }
+  if (mode === "closed") return <span className="text-[12px] text-ink-4">Opens soon</span>;
   if (mode === "live") {
     return oauthReady ? (
       <ButtonLink size="sm" variant="secondary" href={`/api/social/${platform}/connect?returnTo=/account`} prefetch={false}>

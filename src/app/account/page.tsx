@@ -62,6 +62,8 @@ async function AccountContent({ searchParams }: Pick<PageProps<"/account">, "sea
         />
         {data.socialMode === "mock" ? (
           <Notice className="mb-4">Demo mode: links are simulated. In production each platform uses its official OAuth flow.</Notice>
+        ) : data.socialMode === "closed" ? (
+          <Notice className="mb-4">Account linking opens together with video submissions. Each platform connects through its official sign-in.</Notice>
         ) : null}
         <Table minWidth={560}>
           <THead>

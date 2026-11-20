@@ -5,9 +5,11 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { SubmitVideoForm } from "@/components/competition/submit-form";
 import { CopyButton } from "@/components/ui/client";
-import { Container, KV, Panel, Skeleton } from "@/components/ui/misc";
+import { Container, KV, Notice, Panel, Skeleton } from "@/components/ui/misc";
 import { TokenAvatar } from "@/components/ui/token-avatar";
 import { getConfig } from "@/lib/config/store";
+import { PLATFORMS } from "@/lib/domain/platforms";
+import { platformConfigured } from "@/lib/env";
 import { bpsToPct, dateTimeUtc, fullNumber, sol } from "@/lib/format";
 import { CREATOR_FEE_SPLIT } from "@/lib/launch/fee-split";
 import { getCompetitionSummaryByMint } from "@/lib/queries/public";
@@ -69,7 +71,14 @@ async function SubmitContent({ params }: Pick<PageProps<"/competitions/[mint]/su
       </div>
 
       <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_320px]">
-        <SubmitVideoForm mint={c.mint} symbol={c.symbol} open={c.status === "active"} />
+        {PLATFORMS.some((p) => platformConfigured(p)) ? (
+          <SubmitVideoForm mint={c.mint} symbol={c.symbol} open={c.status === "active"} />
+        ) : (
+          <Notice className="self-start">
+            Video submissions open soon. Fees from trading already collect for this competition and roll over until the first payout, so nothing is
+            lost in the meantime.
+          </Notice>
+        )}
         <aside className="flex flex-col gap-4">
           <Panel title="Eligibility">
             <div className="divide-y divide-edge px-5">

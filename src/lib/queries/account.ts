@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { env } from "@/lib/env";
+import { env, isProductionDeployment } from "@/lib/env";
 import { PLATFORMS, type Platform } from "@/lib/domain/platforms";
 import { oauthConfigured } from "@/lib/providers/social/oauth";
 import { listLinkedAccounts } from "@/lib/services/social-accounts";
@@ -24,7 +24,8 @@ export async function getAccountData(wallet: string) {
   ]);
   return {
     linked,
-    socialMode: env.SOCIAL_PROVIDER,
+    /** "closed": simulated video stats on the production site, so linking (like submitting) is not open yet. */
+    socialMode: (env.SOCIAL_PROVIDER === "mock" && isProductionDeployment ? "closed" : env.SOCIAL_PROVIDER) as "mock" | "live" | "closed",
     oauth: Object.fromEntries(PLATFORMS.map((p) => [p, oauthConfigured(p)])) as Record<Platform, boolean>,
     claimable,
     inFlight,
