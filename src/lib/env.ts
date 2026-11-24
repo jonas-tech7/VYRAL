@@ -179,6 +179,11 @@ export function platformConfigured(platform: "youtube" | "tiktok" | "instagram" 
   }
 }
 
+/** Video submissions are open: at least one platform can be verified. */
+export function submissionsOpen(): boolean {
+  return (["youtube", "tiktok", "instagram", "x"] as const).some((p) => platformConfigured(p));
+}
+
 export function adminWalletsFromEnv(): string[] {
   return (env.ADMIN_WALLETS ?? "")
     .split(",")

@@ -63,7 +63,16 @@ export interface LaunchProvider {
   reserveMint?(): Promise<string>;
   prepare(input: LaunchInput): Promise<PreparedLaunch>;
   confirm(args: { prepared: PreparedLaunch; deployer: string; signature: string }): Promise<LaunchConfirmation>;
+  /**
+   * Recognises a landed launch from on-chain state alone (no signature needed), for launches whose confirmation
+   * never reached VYRAL. `missing`: the coin does not exist on-chain.
+   */
+  confirmFromChain?(args: { mint: string; deployer: string }): Promise<ChainConfirmation>;
 }
+
+export type ChainConfirmation =
+  | { ok: true; launchSignature: string | null; poolAddress: string | null; launchedAt: Date | null }
+  | { ok: false; error: string; missing?: boolean };
 
 const EXPIRY_MS = 10 * 60_000;
 
@@ -187,6 +196,39 @@ class PumpFunLaunchProvider implements LaunchProvider {
       transaction: b64(tx),
       followUp: rest.map(b64),
       expiresAt: new Date(Date.now() + 90_000),
+    };
+  }
+
+  async confirmFromChain({ mint, deployer }: { mint: string; deployer: string }): Promise<ChainConfirmation> {
+    const mintKey = new PublicKey(mint);
+    const info = await this.connection.getAccountInfo(mintKey, "confirmed");
+    if (!info) return { ok: false, error: "The coin was not created.", missing: true };
+    // Only VYRAL's prepared launch could create this mint (the key never left the server and signed nothing else);
+    // the locked split must still match this deployer and VYRAL's recipients exactly.
+    const verified = await verifyPumpFunLaunch(this.connection, { mint: mintKey, deployer: new PublicKey(deployer), platform: platformRecipients() });
+    if (!verified.ok) return { ok: false, error: verified.error };
+    // Creation signature and time: the oldest transaction of the mint (paged; very busy coins may exceed the cap).
+    let before: string | undefined;
+    let oldest: { signature: string; blockTime?: number | null } | null = null;
+    let complete = false;
+    for (let page = 0; page < 20; page++) {
+      const batch = await this.connection.getSignaturesForAddress(mintKey, { before, limit: 1000 }, "confirmed");
+      if (batch.length === 0) {
+        complete = true;
+        break;
+      }
+      oldest = batch[batch.length - 1];
+      if (batch.length < 1000) {
+        complete = true;
+        break;
+      }
+      before = oldest.signature;
+    }
+    return {
+      ok: true,
+      launchSignature: complete && oldest ? oldest.signature : null,
+      poolAddress: verified.bondingCurve,
+      launchedAt: complete && oldest?.blockTime ? new Date(oldest.blockTime * 1000) : null,
     };
   }
 

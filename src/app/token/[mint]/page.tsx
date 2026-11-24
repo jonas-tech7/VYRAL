@@ -50,9 +50,10 @@ async function TokenDetail({ params }: Pick<PageProps<"/token/[mint]">, "params"
   const now = new Date();
   const leader = d.leaderboard.find((l) => l.ineligibleReason === null) ?? null;
   const tradeDisabled = d.isSimulated;
-  const buyUrl = `https://jup.ag/swap/${SOL_MINT}-${d.mint}`;
-  const sellUrl = `https://jup.ag/swap/${d.mint}-${SOL_MINT}`;
-  const pumpUrl = d.launchProvider === "pumpfun" ? `https://pump.fun/coin/${d.mint}` : null;
+  // Jupiter's current deep-link format (verified: the page pre-loads both tokens from sell/buy).
+  const buyUrl = `https://jup.ag/swap?sell=${SOL_MINT}&buy=${encodeURIComponent(d.mint)}`;
+  const sellUrl = `https://jup.ag/swap?sell=${encodeURIComponent(d.mint)}&buy=${SOL_MINT}`;
+  const pumpUrl = d.launchProvider === "pumpfun" ? `https://pump.fun/coin/${encodeURIComponent(d.mint)}` : null;
 
   return (
     <div className="animate-fade-in">

@@ -26,6 +26,8 @@ export type LaunchConfig = {
   supply: number;
   /** Admins may mark a launch as the official $VYRAL coin (shown in the site header). */
   canSetOfficial: boolean;
+  /** At least one video platform accepts submissions. */
+  submissionsOpen: boolean;
 };
 
 type Prepared = {
@@ -67,8 +69,23 @@ const competitionPct = bpsToPct(CREATOR_FEE_SPLIT.vaultBps);
 const deployerPct = bpsToPct(CREATOR_FEE_SPLIT.deployerBps);
 const buybackPct = bpsToPct(CREATOR_FEE_SPLIT.buybackBps);
 const treasuryPct = bpsToPct(CREATOR_FEE_SPLIT.treasuryBps);
-/** Name + ticker bytes up to which the first buy still fits in the launch transaction (measured on mainnet). */
-const SINGLE_TX_NAME_BYTES = 20;
+/**
+ * Name + ticker bytes up to which the first buy still fits in the launch transaction. Measured on mainnet: every
+ * valid name (32 bytes) plus ticker (10) fits, so this only guards against future limit changes.
+ */
+const SINGLE_TX_NAME_BYTES = 42;
+
+/** "failed": the launch transaction failed on-chain (nothing was created). "unknown": it has not shown up yet. */
+class LandingError extends Error {
+  constructor(readonly kind: "failed" | "unknown") {
+    super(kind === "failed" ? "The launch transaction failed on-chain." : "The launch transaction has not landed yet.");
+  }
+}
+
+/** Confirm answers that will not change on retry. Anything else (RPC lag, rate limits, server hiccups) is retried. */
+function isFinalConfirmError(err: unknown): boolean {
+  return err instanceof ApiClientError && ["not_found", "invalid_state", "expired", "forbidden", "invalid_request"].includes(err.code);
+}
 
 const PENDING_KEY = "vyral:pending-launch";
 type PendingLaunch = { launchId: string; signature: string };
@@ -101,8 +118,8 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
         router.push(`/competitions/${r.mint}?launched=1`);
       })
       .catch((err) => {
-        // Keep it only while the chain might still confirm it; drop it once it is definitely invalid.
-        if (err instanceof ApiClientError && err.code !== "launch_not_verified" && err.code !== "unauthorized") savePending(null);
+        // Drop it only on a definite answer; otherwise it stays (the server also records sent launches on its own).
+        if (isFinalConfirmError(err)) savePending(null);
       });
   }, [router]);
   const toast = useToast();
@@ -158,7 +175,7 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
   function validate(): Errors {
     const e: Errors = {};
     if (name.trim().length < 2) e.name = "Name must be at least 2 characters.";
-    if (name.trim().length > 32) e.name = "Name must be 32 characters or fewer.";
+    if (new TextEncoder().encode(name.trim()).length > 32) e.name = "Name must be 32 bytes or fewer (emoji and accents count as several).";
     if (!/^[A-Z0-9]{2,10}$/.test(ticker)) e.symbol = "Ticker must be 2–10 letters or digits.";
     if (description.length > 600) e.description = "Description must be 600 characters or fewer.";
     if (!file) e.image = "Upload a token image.";
@@ -171,22 +188,31 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
     return e;
   }
 
-  /** Polls until the transaction is confirmed (throws if it failed on-chain or did not land within ~90 s). */
+  /**
+   * Polls until the transaction is confirmed (~90 s at most). Throws LandingError("failed") when it failed on-chain and
+   * LandingError("unknown") when it has not shown up yet (it may still land). RPC hiccups are retried.
+   */
   async function waitForLanding(sig: string) {
     for (let i = 0; i < 45; i++) {
-      const { value } = await connection.getSignatureStatuses([sig], { searchTransactionHistory: true });
-      const st = value[0];
-      if (st?.err) throw new Error("The launch transaction failed on-chain. Nothing was created; only the network fee was spent.");
+      let st: Awaited<ReturnType<typeof connection.getSignatureStatuses>>["value"][number] = null;
+      try {
+        st = (await connection.getSignatureStatuses([sig], { searchTransactionHistory: true })).value[0];
+      } catch {
+        st = null; // network or rate limit: keep polling
+      }
+      if (st?.err) throw new LandingError("failed");
       if (st && (st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized")) return;
       await new Promise((r) => setTimeout(r, 2000));
     }
-    throw new Error("The launch transaction has not landed yet. If it does, your coin will be live; check your wallet before trying again.");
+    throw new LandingError("unknown");
   }
 
   async function launch() {
     const e = validate();
     setErrors(e);
     if (Object.keys(e).length) return;
+    // Set once the launch transaction has left the wallet: from then on the coin may exist, whatever else fails.
+    let sentSignature: string | null = null;
     try {
       setStep("signin");
       if (!(await ensureSignedIn())) return setStep("idle");
@@ -230,6 +256,8 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
           // One wallet prompt: the launch first, then the initial buy once the coin exists.
           const [signedLaunch, ...signedRest] = await signAllTransactions([tx, ...followUp]);
           signature = await connection.sendRawTransaction(signedLaunch.serialize());
+          sentSignature = signature;
+          savePending({ launchId: prepared.launchId, signature });
           await waitForLanding(signature);
           for (const t of signedRest) {
             try {
@@ -240,6 +268,8 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
           }
         } else {
           signature = await sendTransaction(tx, connection);
+          sentSignature = signature;
+          savePending({ launchId: prepared.launchId, signature });
           for (const t of followUp) {
             await waitForLanding(signature);
             await sendTransaction(t, connection).catch(() =>
@@ -260,19 +290,39 @@ export function LaunchForm({ config }: { config: LaunchConfig }) {
         try {
           result = await api<{ mint: string }>("/api/launch/confirm", { body: { launchId: prepared.launchId, signature } });
         } catch (err) {
-          // The server's RPC node can see the transaction a little later than the browser's.
-          if (prepared.mode === "transaction" && err instanceof ApiClientError && err.code === "launch_not_verified" && i < 19) {
+          // Only a definite answer ends the retries: the server's RPC node can see the transaction a little later
+          // than the browser's, and rate limits or server hiccups pass.
+          if (prepared.mode === "transaction" && !isFinalConfirmError(err) && i < 19) {
             await new Promise((r) => setTimeout(r, 2500));
             continue;
           }
           throw err;
         }
       }
-      toast.push({ tone: "positive", title: `$${ticker} is live`, description: "Its competition is open for submissions." });
       savePending(null);
+      toast.push({
+        tone: "positive",
+        title: `$${ticker} is live`,
+        description: config.submissionsOpen ? "Its competition is open for submissions." : "Its competition is running; video submissions open soon.",
+      });
       router.push(`/competitions/${result!.mint}?launched=1`);
     } catch (err) {
       setStep("idle");
+      if (err instanceof LandingError && err.kind === "failed") {
+        savePending(null);
+        toast.push({ tone: "negative", title: "Launch failed", description: "The launch transaction failed on-chain. Nothing was created; only the network fee was spent." });
+        return;
+      }
+      if (sentSignature) {
+        // The transaction left the wallet, so the coin may well exist: never invite a second launch.
+        toast.push({
+          tone: "neutral",
+          title: "Your coin is being registered",
+          description:
+            "The launch was sent. Once it lands, VYRAL records it automatically within a few minutes, even if you close this page. Check your wallet before launching again.",
+        });
+        return;
+      }
       const rejected = err instanceof Error && /reject|declin|cancel/i.test(err.message);
       toast.push({
         tone: rejected ? "neutral" : "negative",

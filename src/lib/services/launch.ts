@@ -4,7 +4,7 @@
  * configuration shown to the deployer before signing.
  */
 import { randomBytes, randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { ApiError } from "@/lib/api/errors";
 import { hasRole, type Viewer } from "@/lib/auth/session";
@@ -39,7 +39,12 @@ const optionalUrl = (hosts?: string[]) =>
     }, "Enter a valid https:// link");
 
 export const launchInputSchema = z.object({
-  name: z.string().trim().min(2, "Name is too short").max(32, "Name is too long"),
+  // pump.fun limits the name to 32 BYTES (emoji and accented letters take several).
+  name: z
+    .string()
+    .trim()
+    .min(2, "Name is too short")
+    .refine((s) => Buffer.byteLength(s, "utf8") <= 32, "Name is too long (32 bytes max; emoji and accents count as several)"),
   symbol: z
     .string()
     .trim()
@@ -159,8 +164,27 @@ export async function confirmLaunch(wallet: string, launchId: string, signature:
     signature,
   });
   if (!result.ok) throw new ApiError(422, "launch_not_verified", result.error);
+  return recordConfirmedLaunch(req, result, viewer);
+}
 
-  const payload = launchInputSchema.parse(req.payload);
+/**
+ * The stored launch request, parsed with the Terms version it was accepted under (a later Terms update must not
+ * make an already-signed launch impossible to record).
+ */
+const storedLaunchPayloadSchema = launchInputSchema.extend({ termsVersion: z.string() });
+
+type LaunchRequestRow = typeof schema.launchRequests.$inferSelect;
+
+/** Records a verified launch: token, competition, audit entry and (for the official coin) the header address. */
+async function recordConfirmedLaunch(
+  req: LaunchRequestRow,
+  result: { launchSignature: string | null; poolAddress: string | null; launchedAt?: Date | null },
+  viewer?: Viewer | null,
+) {
+  const provider = launchProvider();
+  const launchId = req.id;
+  const wallet = req.deployerWallet;
+  const payload = storedLaunchPayloadSchema.parse(req.payload);
   const p = req.payload as { imageUrl: string; metadataUri: string };
   const configs = await getAllConfig();
   const now = new Date();
@@ -253,41 +277,64 @@ export async function confirmLaunch(wallet: string, launchId: string, signature:
 
 /**
  * Launches whose transaction landed on-chain but whose confirmation never
- * reached VYRAL (closed tab, lost connection). The coin exists and its fees
- * are already locked to the vault, so it is verified from the chain and
- * recorded like any other launch; its competition opens and its fees are
- * credited from then on. (An official-coin flag is not applied here; an
- * administrator can set the coin in the admin dashboard.)
+ * reached VYRAL (closed tab, lost connection, wallet error after sending).
+ *
+ * The coin is recognised from its on-chain state, not from a signature: the
+ * mint key exists only on VYRAL's server and only ever signed the prepared
+ * launch, so a coin with that mint whose fee split is locked exactly to this
+ * deployer and VYRAL's recipients is that launch. Requests whose coin was
+ * never created are marked expired once their transaction can no longer land.
+ * The official-coin flag is applied when the deployer is still an admin.
  */
 export async function reconcileLaunches(now = new Date()) {
   const provider = launchProvider();
-  if (provider.isSimulated || provider.id !== "pumpfun" || !env.SOLANA_RPC_URL) return { skipped: true };
-  const { Connection, PublicKey } = await import("@solana/web3.js");
-  const connection = new Connection(env.SOLANA_RPC_URL, "confirmed");
+  if (provider.isSimulated || !provider.confirmFromChain) return { skipped: true };
   const pending = await db
-    .select({ id: schema.launchRequests.id, mint: schema.launchRequests.mint, deployer: schema.launchRequests.deployerWallet })
+    .select()
     .from(schema.launchRequests)
     .where(
       and(
         eq(schema.launchRequests.status, "prepared"),
         sql`${schema.launchRequests.transaction} IS NOT NULL`,
         sql`${schema.launchRequests.createdAt} < ${new Date(now.getTime() - 3 * 60_000)}`,
-        sql`${schema.launchRequests.createdAt} > ${new Date(now.getTime() - 7 * 86_400_000)}`,
       ),
     )
-    .limit(10);
+    .orderBy(asc(schema.launchRequests.createdAt))
+    .limit(25);
   let recorded = 0;
+  let expired = 0;
   for (const r of pending) {
     try {
-      // The oldest transaction touching the mint is the one that created it.
-      const sigs = await connection.getSignaturesForAddress(new PublicKey(r.mint), { limit: 1000 }, "confirmed");
-      const created = [...sigs].reverse().find((s) => !s.err);
-      if (!created) continue; // never landed: nothing to record
-      await confirmLaunch(r.deployer, r.id, created.signature, null);
-      recorded++;
+      const res = await provider.confirmFromChain({ mint: r.mint, deployer: r.deployerWallet });
+      if (res.ok) {
+        // The official-coin flag was only accepted from an admin at prepare; it still applies if they are one now.
+        const [admin] = (r.payload as { official?: boolean }).official
+          ? await db.select({ role: schema.admins.role }).from(schema.admins).where(eq(schema.admins.wallet, r.deployerWallet))
+          : [];
+        const deployer: Viewer | null = admin ? { wallet: r.deployerWallet, role: admin.role, sessionId: "reconcile" } : null;
+        await recordConfirmedLaunch(r, { ...res, launchedAt: res.launchedAt ?? r.createdAt }, deployer);
+        recorded++;
+      } else if (res.missing && r.createdAt.getTime() < now.getTime() - 15 * 60_000) {
+        // The coin does not exist and its transaction's blockhash expired long ago: it can never land.
+        await db
+          .update(schema.launchRequests)
+          .set({ status: "expired" })
+          .where(and(eq(schema.launchRequests.id, r.id), eq(schema.launchRequests.status, "prepared")));
+        expired++;
+      } else if (!res.missing) {
+        console.error(`[launch] reconcile ${r.mint}: ${res.error}`);
+        // A coin exists but does not verify (should never happen for a VYRAL-prepared mint): stop retrying after a
+        // week so it cannot hold a slot forever. It stays visible in the database for an administrator.
+        if (r.createdAt.getTime() < now.getTime() - 7 * 86_400_000) {
+          await db
+            .update(schema.launchRequests)
+            .set({ status: "failed" })
+            .where(and(eq(schema.launchRequests.id, r.id), eq(schema.launchRequests.status, "prepared")));
+        }
+      }
     } catch (err) {
       console.error(`[launch] reconcile ${r.mint} failed:`, err instanceof Error ? err.message : err);
     }
   }
-  return { checked: pending.length, recorded };
+  return { checked: pending.length, recorded, expired };
 }

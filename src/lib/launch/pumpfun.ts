@@ -34,6 +34,7 @@ import {
   getBuyV3TokenAmountFromQuoteAmount,
   newBondingCurve,
 } from "@pump-fun/pump-sdk";
+import { ApiError } from "@/lib/api/errors";
 import { CREATOR_FEE_SPLIT, type FeeSplit } from "./fee-split";
 
 export type PumpFunLaunchParams = {
@@ -85,7 +86,7 @@ export function shareholders(p: Pick<PumpFunLaunchParams, "deployer" | "platform
 async function launchInstructions(connection: Connection | null, p: PumpFunLaunchParams) {
   const bytes = (s: string) => Buffer.byteLength(s, "utf8");
   if (bytes(p.name) > PUMP_LIMITS.name || bytes(p.symbol) > PUMP_LIMITS.symbol || bytes(p.uri) > PUMP_LIMITS.uri) {
-    throw new Error("Name, ticker or metadata link is too long for pump.fun.");
+    throw new ApiError(400, "invalid_request", "Name, ticker or metadata link is too long for pump.fun.");
   }
   const split = p.split ?? CREATOR_FEE_SPLIT;
   if (split.vaultBps + split.deployerBps + split.treasuryBps + split.buybackBps !== 10_000 || split.vaultBps <= 0) throw new Error("Invalid fee split.");
@@ -111,6 +112,9 @@ async function launchInstructions(connection: Connection | null, p: PumpFunLaunc
       newShareholders: shareholders(p),
       quoteMint: NATIVE_MINT,
       quoteTokenProgram: TOKEN_PROGRAM_ID,
+      // The curve was created a moment ago in this transaction, so it is live: pump-fees ignores the canonical pool
+      // account then, and leaving it out saves 33 bytes (keeps the deployer's first buy in the launch transaction).
+      bondingCurveComplete: false,
     }),
   ];
 
@@ -171,7 +175,7 @@ export async function buildPumpFunLaunch(connection: Connection, p: PumpFunLaunc
   const single = compile([...ixs, ...buy]);
   if (fits(single)) return { transactions: [single], lastValidBlockHeight, expectedTokens };
   const launch = compile(ixs);
-  if (!fits(launch)) throw new Error("The launch transaction is too large. Use a shorter name.");
+  if (!fits(launch)) throw new ApiError(400, "invalid_request", "The launch transaction is too large. Use a shorter name.");
   const budget = [ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }), ComputeBudgetProgram.setComputeUnitPrice({ microLamports: PRIORITY_MICRO_LAMPORTS })];
   return { transactions: buy.length ? [launch, compile([...budget, ...buy])] : [launch], lastValidBlockHeight, expectedTokens };
 }
