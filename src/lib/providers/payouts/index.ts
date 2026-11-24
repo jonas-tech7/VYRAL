@@ -219,17 +219,26 @@ class SolanaPayoutExecutor implements PayoutExecutor {
 
   async verifyTransfer(signature: string, expected: { recipient: string; lamports: number; payoutId: string }): Promise<ManualVerification> {
     if (!isValidTxSignature(signature)) return { ok: false, reason: "Invalid signature format" };
-    const tx = await this.connection.getParsedTransaction(signature, { maxSupportedTransactionVersion: 1, commitment: "finalized" });
+    const tx = await this.connection.getParsedTransaction(signature, { maxSupportedTransactionVersion: 0, commitment: "finalized" });
     if (!tx) return { ok: false, reason: "Transaction not found at finalized commitment" };
     if (tx.meta?.err) return { ok: false, reason: "Transaction failed on-chain" };
-    const transfers = tx.transaction.message.instructions.filter(
-      (ix) => "parsed" in ix && ix.program === "system" && (ix.parsed as { type?: string })?.type === "transfer",
-    );
-    const match = transfers.some((ix) => {
-      const info = (ix as { parsed: { info: { destination: string; lamports: number } } }).parsed.info;
-      return info.destination === expected.recipient && info.lamports >= expected.lamports;
+    const instructions = tx.transaction.message.instructions;
+    // The transfer must come from the reward vault, or carry this payout's memo (sent from another wallet on purpose),
+    // so an unrelated transfer to the same wallet can never mark the reward as paid.
+    const vault = this.signer.publicKey.toBase58();
+    const memo = payoutMemo(expected.payoutId);
+    const hasMemo = instructions.some((ix) => ix.programId.equals(MEMO_PROGRAM_ID) && "parsed" in ix && ix.parsed === memo);
+    const match = instructions.some((ix) => {
+      if (!("parsed" in ix) || ix.program !== "system" || (ix.parsed as { type?: string })?.type !== "transfer") return false;
+      const info = (ix.parsed as { info: { source: string; destination: string; lamports: number } }).info;
+      return info.destination === expected.recipient && info.lamports >= expected.lamports && (info.source === vault || hasMemo);
     });
-    if (!match) return { ok: false, reason: "No transfer of the expected amount to the recipient was found" };
+    if (!match) {
+      return {
+        ok: false,
+        reason: `No transfer of at least the payout amount to the recipient from the reward vault (or with the memo "${memo}") was found`,
+      };
+    }
     return { ok: true, slot: tx.slot };
   }
 }

@@ -32,9 +32,11 @@ import { OnlinePumpSdk, feeSharingConfigPda } from "@pump-fun/pump-sdk";
 import { env } from "@/lib/env";
 import { attributeVaultDeposit, signatureOfKey, type CoinRef, type VaultTransaction } from "@/lib/launch/pumpfun-fees";
 import type { TransactionSigner } from "@/lib/providers/payouts";
+import { scanSignatures, type ScanState } from "@/lib/solana/scan";
 import { SIM_VAULT_FEE_RATE, simSolUsd, simVolumeRate } from "@/lib/sim/market-sim";
 
-export type FeeToken = { id: string; mint: string; launchedAt: Date; poolAddress: string | null };
+/** `active`: its competition is running (fees are distributed); every coin is credited what it paid the vault. */
+export type FeeToken = { id: string; mint: string; launchedAt: Date; poolAddress: string | null; active: boolean };
 
 export type ObservedFee = {
   tokenId: string;
@@ -49,8 +51,11 @@ export type FeeCursor = Record<string, unknown>;
 export interface FeeProvider {
   readonly id: "mock" | "pumpfun" | "onchain";
   readonly isSimulated: boolean;
-  /** Returns new observations since the cursor, plus the advanced cursor. */
-  poll(tokens: FeeToken[], cursor: FeeCursor): Promise<{ fees: ObservedFee[]; cursor: FeeCursor }>;
+  /**
+   * Returns new observations since the cursor, plus the advanced cursor. `recordingMints`: coins launched moments
+   * ago that are not recorded yet; deposits for them wait until they are.
+   */
+  poll(tokens: FeeToken[], cursor: FeeCursor, opts?: { recordingMints?: string[] }): Promise<{ fees: ObservedFee[]; cursor: FeeCursor }>;
   /** Finality check for pending observations. */
   confirmations(signatures: string[]): Promise<Map<string, "confirmed" | "failed" | "pending">>;
 }
@@ -65,7 +70,7 @@ class MockFeeProvider implements FeeProvider {
     const now = Date.now();
     const next: FeeCursor = { ...cursor };
     const fees: ObservedFee[] = [];
-    for (const t of tokens) {
+    for (const t of tokens.filter((x) => x.active)) {
       const last = typeof cursor[t.id] === "number" ? (cursor[t.id] as number) : now - MIN_SIM_INTERVAL_MS;
       if (now - last < MIN_SIM_INTERVAL_MS) continue;
       let usd = 0;
@@ -155,9 +160,11 @@ class OnchainFeeProvider implements FeeProvider {
 const DISTRIBUTE_EVERY_MS = 15 * 60_000;
 /** Coins handled per tick, so a serverless cron stays well inside its time limit. */
 const MAX_PER_TICK = 6;
-/** Vault transactions read per tick; the rest follow on the next tick. */
-const MAX_VAULT_TX_PER_TICK = 120;
-/** Cursor entry: the newest vault transaction already read. */
+/** Vault transactions read per tick (one RPC call each); the rest follow on the next tick. */
+const MAX_VAULT_TX_PER_TICK = 60;
+/** Cursor entry: progress through the vault's history (gap-free, see lib/solana/scan.ts). */
+const VAULT_SCAN = "vault:scan";
+/** Cursor entry of the first version: the newest vault transaction read. */
 const VAULT_CURSOR = "vault:lastSignature";
 /** pump.fun bonding-curve program (mainnet and devnet). */
 const PUMP_PROGRAM = new PublicKey("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
@@ -173,7 +180,7 @@ class PumpFunFeeProvider implements FeeProvider {
    * 2. Reads the reward vault's new transactions and credits every
    *    distribution that paid it to its coin, whoever sent it.
    */
-  async poll(tokens: FeeToken[], cursor: FeeCursor) {
+  async poll(tokens: FeeToken[], cursor: FeeCursor, opts?: { recordingMints?: string[] }) {
     if (!env.FEE_VAULT_ADDRESS) {
       console.error("[fees] FEE_VAULT_ADDRESS is not set");
       return { fees: [], cursor };
@@ -181,13 +188,14 @@ class PumpFunFeeProvider implements FeeProvider {
     const vault = new PublicKey(env.FEE_VAULT_ADDRESS);
     const next: FeeCursor = { ...cursor };
     await this.distributeDue(tokens, cursor, next);
-    const fees = await this.readVault(vault, tokens, cursor, next);
+    const fees = await this.readVault(vault, tokens, opts?.recordingMints ?? [], cursor, next);
     return { fees, cursor: next };
   }
 
   private async distributeDue(tokens: FeeToken[], cursor: FeeCursor, next: FeeCursor) {
     const now = Date.now();
     const due = tokens
+      .filter((t) => t.active)
       .filter((t) => now - (typeof cursor[t.id] === "number" ? (cursor[t.id] as number) : 0) >= DISTRIBUTE_EVERY_MS)
       .sort((a, b) => ((cursor[a.id] as number) ?? 0) - ((cursor[b.id] as number) ?? 0))
       .slice(0, MAX_PER_TICK);
@@ -224,38 +232,41 @@ class PumpFunFeeProvider implements FeeProvider {
     }
   }
 
-  /** Credits the vault's new distribution transactions (oldest first) and advances the vault cursor. */
-  private async readVault(vault: PublicKey, tokens: FeeToken[], cursor: FeeCursor, next: FeeCursor): Promise<ObservedFee[]> {
-    const until = typeof cursor[VAULT_CURSOR] === "string" ? (cursor[VAULT_CURSOR] as string) : undefined;
-    const sigs: ConfirmedSignatureInfo[] = [];
-    let before: string | undefined;
-    for (let page = 0; page < 10; page++) {
-      const batch = await this.connection.getSignaturesForAddress(vault, { until, before, limit: 1000 }, "confirmed");
-      sigs.push(...batch);
-      if (batch.length < 1000) break;
-      before = batch[batch.length - 1].signature;
-      if (page === 9) console.warn("[fees] more than 10,000 new vault transactions; older ones are skipped");
-    }
-    sigs.reverse();
-
+  /**
+   * Credits the vault's distribution transactions to their coins, reading its history gap-free. Credits are keyed
+   * by transaction (unique in fee_events), so a transaction read twice is never credited twice.
+   */
+  private async readVault(vault: PublicKey, tokens: FeeToken[], recordingMints: string[], cursor: FeeCursor, next: FeeCursor): Promise<ObservedFee[]> {
+    const start: ScanState =
+      (cursor[VAULT_SCAN] as ScanState | undefined) ?? (typeof cursor[VAULT_CURSOR] === "string" ? { head: cursor[VAULT_CURSOR] as string } : {});
     const coins = new Map<string, CoinRef>(tokens.map((t) => [feeSharingConfigPda(new PublicKey(t.mint)).toBase58(), { tokenId: t.id, mint: t.mint }]));
+    const recording = new Set(recordingMints.map((m) => feeSharingConfigPda(new PublicKey(m)).toBase58()));
     const vaultAddress = vault.toBase58();
     const fees: ObservedFee[] = [];
-    let read = 0;
-    for (const s of sigs) {
-      if (!s.err) {
-        if (read++ >= MAX_VAULT_TX_PER_TICK) break;
-        const tx = await this.connection.getParsedTransaction(s.signature, { maxSupportedTransactionVersion: 1, commitment: "confirmed" });
-        if (!tx?.meta) break; // not available yet: retry from here next tick
-        const deposit = attributeVaultDeposit(toVaultTransaction(s.signature, tx), vaultAddress, coins);
-        if (deposit.unattributed) console.warn(`[fees] vault transaction ${s.signature}: ${deposit.unattributed}`);
-        const observedAt = new Date((tx.blockTime ?? Math.floor(Date.now() / 1000)) * 1000);
-        for (const c of deposit.credits) {
-          fees.push({ tokenId: c.tokenId, amountLamports: c.amountLamports, txSignature: c.key, observedAt, source: "pumpfun:distribute" });
-        }
+
+    const handle = async (s: ConfirmedSignatureInfo) => {
+      const tx = await this.connection.getParsedTransaction(s.signature, { maxSupportedTransactionVersion: 0, commitment: "confirmed" });
+      if (!tx?.meta) {
+        // Normally served within seconds. One that stays unavailable for an hour is passed over so the scan cannot stall.
+        if (!s.blockTime || Date.now() / 1000 - s.blockTime < 3_600) return "retry" as const;
+        console.error(`[fees] vault transaction ${s.signature} unavailable for over an hour; skipped`);
+        return "done" as const;
       }
-      next[VAULT_CURSOR] = s.signature;
-    }
+      const vt = toVaultTransaction(s.signature, tx);
+      // A coin launched moments ago is still being recorded: wait for it rather than leave its fees unattributed.
+      if (vt.accountKeys.some((k) => recording.has(k))) return "retry" as const;
+      const deposit = attributeVaultDeposit(vt, vaultAddress, coins);
+      if (deposit.unattributed) console.warn(`[fees] vault transaction ${s.signature}: ${deposit.unattributed}`);
+      const observedAt = new Date((tx.blockTime ?? Math.floor(Date.now() / 1000)) * 1000);
+      for (const c of deposit.credits) {
+        fees.push({ tokenId: c.tokenId, amountLamports: c.amountLamports, txSignature: c.key, observedAt, source: "pumpfun:distribute" });
+      }
+      return "done" as const;
+    };
+
+    const res = await scanSignatures(this.connection, vault, start, handle, { maxReads: MAX_VAULT_TX_PER_TICK });
+    next[VAULT_SCAN] = res.state;
+    delete next[VAULT_CURSOR];
     return fees;
   }
 

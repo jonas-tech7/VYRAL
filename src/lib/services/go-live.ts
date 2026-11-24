@@ -13,6 +13,7 @@ import { env, isDemoMode, platformConfigured } from "@/lib/env";
 import { platformRecipients } from "@/lib/launch/recipients";
 import { LOOKUP_TABLE_STATE_KEY, lookupTableAddress } from "@/lib/launch/lookup-table";
 import { buildPumpFunLaunch, staticLaunchAccounts } from "@/lib/launch/pumpfun";
+import { BUYBACK_LEDGER_KEY } from "@/lib/services/buyback";
 import { vaultSigner } from "@/lib/providers/payouts";
 import { audit } from "./audit";
 
@@ -89,6 +90,11 @@ export async function createLookupTable(actor: string) {
       const blocks = await c.getBlocks(tip - 150, tip - 100, "confirmed");
       const recentSlot = blocks.at(-1) ?? tip - 100;
       const [create, address] = AddressLookupTableProgram.createLookupTable({ authority: signer.publicKey, payer: signer.publicKey, recentSlot });
+      // Remembered BEFORE sending: if the request times out although the table was created, the next attempt reuses it.
+      await db
+        .insert(schema.workerState)
+        .values({ key: LUT_PENDING_KEY, value: { address: address.toBase58() }, updatedAt: new Date() })
+        .onConflictDoUpdate({ target: schema.workerState.key, set: { value: { address: address.toBase58() }, updatedAt: new Date() } });
       try {
         await send(new Transaction().add(create));
         table = address;
@@ -98,10 +104,6 @@ export async function createLookupTable(actor: string) {
         await new Promise((r) => setTimeout(r, 2_000));
       }
     }
-    await db
-      .insert(schema.workerState)
-      .values({ key: LUT_PENDING_KEY, value: { address: table.toBase58() }, updatedAt: new Date() })
-      .onConflictDoUpdate({ target: schema.workerState.key, set: { value: { address: table.toBase58() }, updatedAt: new Date() } });
   }
 
   // Add only the accounts the table does not hold yet (a new table becomes readable within a slot or two).
@@ -198,7 +200,8 @@ export async function resetForLaunch(actor: string, confirm: boolean) {
   await db.transaction(async (tx) => {
     await tx.execute(sql.raw(`TRUNCATE ${tables.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`));
     await tx.execute(sql`DELETE FROM users WHERE wallet NOT IN (SELECT wallet FROM admins)`);
-    await tx.execute(sql`DELETE FROM worker_state WHERE key NOT IN (${LUT_KEY}, ${LUT_PENDING_KEY})`);
+    // The lookup table and the platform wallet's ledger describe real on-chain state: kept.
+    await tx.execute(sql`DELETE FROM worker_state WHERE key NOT IN (${LUT_KEY}, ${LUT_PENDING_KEY}, ${BUYBACK_LEDGER_KEY})`);
     await audit(tx, { actor, actorRole: "admin", action: "golive.reset_demo_data", targetType: "platform", targetId: "all", after: counts });
   });
   return { removed: true, counts };

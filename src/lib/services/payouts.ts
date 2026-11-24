@@ -26,6 +26,17 @@ import { audit } from "./audit";
 
 /** Kept in the vault on every payout: the network fee plus the rent-exempt minimum of a system account (890,880 lamports). */
 const FEE_BUFFER_LAMPORTS = 50_000 + 890_880;
+/**
+ * An attempt counts as expired only this many blocks (~1 minute) after its last valid height. RPC providers spread
+ * requests over nodes that can lag each other; the margin keeps a lagging node from hiding a transaction that landed
+ * in the last blocks before expiry (which would otherwise lead to a second payment).
+ */
+const EXPIRY_MARGIN_BLOCKS = 150;
+
+function isUniqueViolation(e: unknown): boolean {
+  const err = e as { code?: string; cause?: { code?: string } } | null;
+  return (err?.code ?? err?.cause?.code) === "23505";
+}
 
 type Attempt = typeof schema.payoutAttempts.$inferSelect;
 type Payout = typeof schema.payouts.$inferSelect;
@@ -63,7 +74,7 @@ async function settleAttempt(attempt: Attempt, payout: Payout, st: ChainStatus |
   }
 
   const landedWithError = Boolean(st && st.state !== "not_found" && st.err);
-  const expired = (!st || st.state === "not_found") && height > attempt.lastValidBlockHeight;
+  const expired = (!st || st.state === "not_found") && height > attempt.lastValidBlockHeight + EXPIRY_MARGIN_BLOCKS;
 
   if (landedWithError || expired) {
     const exhausted = payout.attemptCount >= payout.autoAttemptBudget;
@@ -189,23 +200,34 @@ async function startAttempt(payout: Payout, now: Date, triggeredBy: string) {
 
 export async function executePayouts(now = new Date()) {
   const executor = payoutExecutor();
-  const summary = { confirmed: 0, retried: 0, attention: 0, started: 0, inflight: 0 };
+  const summary = { confirmed: 0, retried: 0, attention: 0, started: 0, inflight: 0, errors: 0 };
+
+  // Only payouts made for this executor: a real executor never touches simulated (demonstration) payouts.
+  const sameKind = eq(schema.payouts.isSimulated, executor.isSimulated);
 
   // 1. Resolve in-flight attempts.
   const inflight = await db
     .select({ attempt: schema.payoutAttempts, payout: schema.payouts })
     .from(schema.payoutAttempts)
     .innerJoin(schema.payouts, eq(schema.payouts.id, schema.payoutAttempts.payoutId))
-    .where(inArray(schema.payoutAttempts.status, ["built", "sent"]))
+    .where(and(inArray(schema.payoutAttempts.status, ["built", "sent"]), sameKind))
     .limit(200);
   if (inflight.length > 0) {
-    const [statuses, height] = await Promise.all([executor.getStatuses(inflight.map((r) => r.attempt.signature)), executor.getBlockHeight()]);
+    // Block height FIRST: an attempt is only declared expired from a status read after the height was past its limit.
+    const height = await executor.getBlockHeight();
+    const statuses = await executor.getStatuses(inflight.map((r) => r.attempt.signature));
     for (const { attempt, payout } of inflight) {
-      const r = await settleAttempt(attempt, payout, statuses.get(attempt.signature), height, now);
-      if (r === "confirmed") summary.confirmed++;
-      else if (r === "retry") summary.retried++;
-      else if (r === "requires_attention") summary.attention++;
-      else summary.inflight++;
+      try {
+        const r = await settleAttempt(attempt, payout, statuses.get(attempt.signature), height, now);
+        if (r === "confirmed") summary.confirmed++;
+        else if (r === "retry") summary.retried++;
+        else if (r === "requires_attention") summary.attention++;
+        else summary.inflight++;
+      } catch (e) {
+        // One payout's problem must not hold up the others; it is picked up again next run.
+        console.error(`[payouts] settling ${payout.id} failed:`, e instanceof Error ? e.message : e);
+        summary.errors++;
+      }
     }
   }
 
@@ -213,18 +235,23 @@ export async function executePayouts(now = new Date()) {
   const pending = await db
     .select()
     .from(schema.payouts)
-    .where(eq(schema.payouts.status, "pending"))
+    .where(and(eq(schema.payouts.status, "pending"), sameKind))
     .orderBy(asc(schema.payouts.createdAt))
     .limit(25);
   for (const p of pending) {
-    if (p.attemptCount >= p.autoAttemptBudget) {
-      await db.update(schema.payouts).set({ status: "requires_attention", updatedAt: now }).where(eq(schema.payouts.id, p.id));
-      summary.attention++;
-      continue;
+    try {
+      if (p.attemptCount >= p.autoAttemptBudget) {
+        await db.update(schema.payouts).set({ status: "requires_attention", updatedAt: now }).where(eq(schema.payouts.id, p.id));
+        summary.attention++;
+        continue;
+      }
+      const r = await startAttempt(p, now, "worker");
+      if (r === "submitted") summary.started++;
+      else if (r === "above_limit" || r === "insufficient_balance") summary.attention++;
+    } catch (e) {
+      console.error(`[payouts] starting ${p.id} failed:`, e instanceof Error ? e.message : e);
+      summary.errors++;
     }
-    const r = await startAttempt(p, now, "worker");
-    if (r === "submitted") summary.started++;
-    else if (r === "above_limit") summary.attention++;
   }
   return summary;
 }
@@ -247,11 +274,12 @@ type Actor = { wallet: string; role: string | null; ipHash?: string | null };
 export async function requeuePayout(payoutId: string, actor: Actor, kind: "retry" | "claim", note?: string | null) {
   await assertNoInflight(payoutId);
   return db.transaction(async (tx) => {
-    const locked = await tx.execute<{ status: string; recipient_wallet: string; attempt_count: number }>(
-      sql`SELECT status, recipient_wallet, attempt_count FROM payouts WHERE id = ${payoutId} FOR UPDATE`,
+    const locked = await tx.execute<{ status: string; recipient_wallet: string; attempt_count: number; is_simulated: boolean }>(
+      sql`SELECT status, recipient_wallet, attempt_count, is_simulated FROM payouts WHERE id = ${payoutId} FOR UPDATE`,
     );
     const p = locked.rows[0];
     if (!p) throw new ApiError(404, "not_found", "Payout not found.");
+    if (p.is_simulated !== payoutExecutor().isSimulated) throw new ApiError(409, "invalid_state", "This payout belongs to the demonstration environment.");
     if (p.status !== "requires_attention") throw new ApiError(409, "invalid_state", "Only payouts that need attention can be retried.");
     if (kind === "claim" && p.recipient_wallet !== actor.wallet) throw new ApiError(403, "forbidden", "Only the winning wallet can claim this reward.");
     await tx
@@ -316,7 +344,16 @@ export async function settleManually(payoutId: string, signature: string, actor:
   await assertNoInflight(payoutId);
   const [p] = await db.select().from(schema.payouts).where(eq(schema.payouts.id, payoutId));
   if (!p) throw new ApiError(404, "not_found", "Payout not found.");
-  if (!["pending", "requires_attention"].includes(p.status)) throw new ApiError(409, "invalid_state", "This payout can no longer be settled manually.");
+  // Only once the automatic flow has stopped: a pending payout may be sent automatically at any moment.
+  if (p.status !== "requires_attention") throw new ApiError(409, "invalid_state", "Only payouts that need attention can be settled manually.");
+  if (p.isSimulated !== payoutExecutor().isSimulated) throw new ApiError(409, "invalid_state", "This payout belongs to the demonstration environment.");
+  // A signature of any automatic attempt (this or another payout's) is not a manual transfer.
+  const [own] = await db
+    .select({ id: schema.payoutAttempts.id })
+    .from(schema.payoutAttempts)
+    .where(eq(schema.payoutAttempts.signature, signature))
+    .limit(1);
+  if (own) throw new ApiError(409, "signature_used", "That signature belongs to an automatic payout attempt.");
 
   const v = await payoutExecutor().verifyTransfer(signature, { recipient: p.recipientWallet, lamports: p.amountLamports, payoutId });
   if (!v.ok) throw new ApiError(422, "verification_failed", v.reason);
@@ -334,7 +371,7 @@ export async function settleManually(payoutId: string, signature: string, actor:
           lastError: null,
           updatedAt: new Date(),
         })
-        .where(and(eq(schema.payouts.id, payoutId), inArray(schema.payouts.status, ["pending", "requires_attention"])))
+        .where(and(eq(schema.payouts.id, payoutId), eq(schema.payouts.status, "requires_attention")))
         .returning({ id: schema.payouts.id });
       if (!updated.length) throw new ApiError(409, "invalid_state", "Payout changed state; reload and try again.");
       await audit(tx, {
@@ -351,7 +388,7 @@ export async function settleManually(payoutId: string, signature: string, actor:
       return { ok: true };
     });
   } catch (e) {
-    if ((e as { code?: string })?.code === "23505") throw new ApiError(409, "signature_used", "That signature already settles another payout.");
+    if (isUniqueViolation(e)) throw new ApiError(409, "signature_used", "That signature already settles another payout.");
     throw e;
   }
 }

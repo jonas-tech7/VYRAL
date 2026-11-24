@@ -1,20 +1,40 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, gt, isNotNull, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { feeProvider } from "@/lib/providers/fees";
 
 const CURSOR_KEY = "fees:cursor";
+/** A launch that was sent but not recorded yet is normally recorded within minutes (see reconcileLaunches). */
+const RECORDING_WINDOW_MS = 30 * 60_000;
 
 /** Records newly observed creator fees (pending) and promotes finalized ones to confirmed. */
 export async function syncFees(now = new Date()) {
   const provider = feeProvider();
+  // Coins launched moments ago whose launch is still being recorded: their fees wait instead of going unattributed.
+  // Read BEFORE the coins, so a launch recorded in between is in one of the two lists.
+  const recording = await db
+    .select({ mint: schema.launchRequests.mint })
+    .from(schema.launchRequests)
+    .where(
+      and(
+        eq(schema.launchRequests.status, "prepared"),
+        isNotNull(schema.launchRequests.transaction),
+        gt(schema.launchRequests.createdAt, new Date(now.getTime() - RECORDING_WINDOW_MS)),
+      ),
+    );
+  // Every coin is credited what it paid the vault; only running competitions get their fees distributed.
   const tokens = await db
-    .select({ id: schema.tokens.id, mint: schema.tokens.mint, launchedAt: schema.tokens.launchedAt, poolAddress: schema.tokens.poolAddress })
+    .select({
+      id: schema.tokens.id,
+      mint: schema.tokens.mint,
+      launchedAt: schema.tokens.launchedAt,
+      poolAddress: schema.tokens.poolAddress,
+      active: sql<boolean>`${schema.competitions.status} IN ('active', 'paused')`,
+    })
     .from(schema.tokens)
-    .innerJoin(schema.competitions, eq(schema.competitions.tokenId, schema.tokens.id))
-    .where(inArray(schema.competitions.status, ["active", "paused"]));
+    .innerJoin(schema.competitions, eq(schema.competitions.tokenId, schema.tokens.id));
 
   const [state] = await db.select().from(schema.workerState).where(eq(schema.workerState.key, CURSOR_KEY));
-  const { fees, cursor } = await provider.poll(tokens, state?.value ?? {});
+  const { fees, cursor } = await provider.poll(tokens, state?.value ?? {}, { recordingMints: recording.map((r) => r.mint) });
 
   let observed = 0;
   if (fees.length) {

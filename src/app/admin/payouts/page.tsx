@@ -92,21 +92,23 @@ async function Payouts({ searchParams }: Pick<PageProps<"/admin/payouts">, "sear
                 {p.status === "requires_attention" || p.status === "pending" ? (
                   <span className="inline-flex gap-1.5">
                     {p.status === "requires_attention" ? (
-                      <ActionButton
-                        label="Retry"
-                        title="Retry payout"
-                        description="Queues new automatic attempts to the same recipient. Only allowed when no attempt is in flight."
-                        endpoint={`/api/admin/payouts/${p.id}/retry`}
-                      />
+                      <>
+                        <ActionButton
+                          label="Retry"
+                          title="Retry payout"
+                          description="Queues new automatic attempts to the same recipient. Only allowed when no attempt is in flight."
+                          endpoint={`/api/admin/payouts/${p.id}/retry`}
+                        />
+                        <ActionButton
+                          label="Settle"
+                          title="Settle with an external transfer"
+                          description={`Paste the signature of a transfer you made outside the automatic flow. It is verified on-chain (finalized, to this recipient, at least this amount, sent from the reward vault or carrying the memo "VYRAL payout ${p.id}") before the payout is marked paid.`}
+                          endpoint={`/api/admin/payouts/${p.id}/settle`}
+                          fields={[{ kind: "text", name: "signature", label: "Transaction signature", placeholder: "5Ksx…", required: true, mono: true }]}
+                          minNote={10}
+                        />
+                      </>
                     ) : null}
-                    <ActionButton
-                      label="Settle"
-                      title="Settle with an external transfer"
-                      description="Paste the signature of a transfer you made outside the automatic flow. It is verified on-chain (finalized, to this recipient, at least this amount) before the payout is marked paid."
-                      endpoint={`/api/admin/payouts/${p.id}/settle`}
-                      fields={[{ kind: "text", name: "signature", label: "Transaction signature", placeholder: "5Ksx…", required: true, mono: true }]}
-                      minNote={10}
-                    />
                     <ActionButton
                       label="Void"
                       title="Void payout"
